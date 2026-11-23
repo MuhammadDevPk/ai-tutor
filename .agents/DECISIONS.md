@@ -35,3 +35,6 @@ Environment notes: the remote cloud browser cannot reach this VM's localhost (di
 
 ## Phase 4 grill — operator sign-off (2026-11-23, under Malik's autonomy order)
 (1) Token counting: chars/4 estimator behind a TokenCounter interface, no new tokenizer dependency; the ROADMAP section ceilings (750/500/900/300/1000, prompt total <= 3,450 leaving ~550 completion) are enforced exactly with that estimator. (2) Tests drive the real LLMRouter with the scripted FakeProvider; no network. (3) The simulation harness is both a pytest module and a runnable module (python -m app.tutor.simulate). (4) Migration 004 only if tutor_sessions lacks a JSONB FSM-state column; migration 001 is never edited.
+
+## Retro-review backlog (operator ruling, 2026-11-23)
+Finding 9 of the Phase 1 retro-review (unique constraint on syllabus_nodes(course_id, path)): ACCEPTED as backlog, not fixed in the review PR. The reviewer left migration 001 untouched (correct — applied migrations are immutable); a future migration 005 may add CREATE UNIQUE INDEX IF NOT EXISTS on (course_id, path) once the ingestion idempotence path is re-verified against it. No current defect: tree persistence is idempotent by delete-then-insert per course.

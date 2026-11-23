@@ -60,6 +60,17 @@ def test_sanitize_ltree_path_valid():
     assert sanitize_ltree_path("ch01") == "ch01"
     assert sanitize_ltree_path("ch01.t02_mean.s01") == "ch01.t02_mean.s01"
     assert sanitize_ltree_path("STA301.CH01.TOPIC_1") == "STA301.CH01.TOPIC_1"
+    assert sanitize_ltree_path("  ch01.t01  ") == "ch01.t01"
+
+
+def test_sanitize_ltree_path_label_length_limits():
+    """PostgreSQL ltree labels must be <= 255 characters each."""
+    valid_255_label = "a" * 255
+    assert sanitize_ltree_path(f"ch01.{valid_255_label}") == f"ch01.{valid_255_label}"
+
+    invalid_256_label = "a" * 256
+    with pytest.raises(ValueError, match="255 characters"):
+        sanitize_ltree_path(f"ch01.{invalid_256_label}")
 
 
 def test_sanitize_ltree_path_invalid():

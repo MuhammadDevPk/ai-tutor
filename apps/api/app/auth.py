@@ -12,6 +12,8 @@ from app.config import settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=True)
 
+_dev_password_hash: str | None = None
+
 
 def hash_password(password: str) -> str:
     return str(pwd_context.hash(password))
@@ -23,11 +25,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def seed_dev_user() -> dict[str, Any]:
     """Provides the seeded dev user credentials based on environment settings."""
+    global _dev_password_hash
+    if _dev_password_hash is None:
+        _dev_password_hash = hash_password(settings.DEV_USER_PASSWORD)
     return {
         "user_id": settings.DEV_USER_ID,
         "email": settings.DEV_USER_EMAIL,
         "password": settings.DEV_USER_PASSWORD,
-        "password_hash": hash_password(settings.DEV_USER_PASSWORD),
+        "password_hash": _dev_password_hash,
     }
 
 

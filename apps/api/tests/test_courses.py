@@ -59,3 +59,38 @@ def test_get_course_other_user_forbidden(auth_headers: dict[str, str]):
     random_id = uuid4()
     resp = client.get(f"/courses/{random_id}", headers=auth_headers)
     assert resp.status_code == 404
+
+
+def test_course_cross_user_isolation(auth_headers: dict[str, str]):
+    """Adversarial check: Course created by User A cannot be accessed by User B."""
+    # 1. User A creates a course
+    create_resp = client.post(
+        "/courses",
+        json={
+            "course_code": f"ISO{uuid4().hex[:4].upper()}",
+            "title": "Isolation Course",
+        },
+        headers=auth_headers,
+    )
+    assert create_resp.status_code == 201
+    course_id = create_resp.json()["id"]
+
+    try:
+        # 2. User B tries to access User A's course
+        user_b_id = uuid4()
+        token_b = create_access_token(user_id=user_b_id)
+        user_b_headers = {"Authorization": f"Bearer {token_b}"}
+
+        get_resp = client.get(f"/courses/{course_id}", headers=user_b_headers)
+        assert get_resp.status_code == 404
+
+        # 3. User B tries to delete User A's course
+        del_resp = client.delete(f"/courses/{course_id}", headers=user_b_headers)
+        assert del_resp.status_code == 404
+
+        # 4. User A can still access their course
+        get_owner_resp = client.get(f"/courses/{course_id}", headers=auth_headers)
+        assert get_owner_resp.status_code == 200
+    finally:
+        # Clean up
+        client.delete(f"/courses/{course_id}", headers=auth_headers)

@@ -211,12 +211,19 @@ async def test_session_agent_stage_2_interrupt_cancels_and_dispatches_qa():
     )
 
     datachannel_events: list[DataChannelEvent] = []
+    sentence1_started = asyncio.Event()
+
+    def handle_datachannel_event(ev: DataChannelEvent) -> None:
+        datachannel_events.append(ev)
+        if isinstance(ev, AudioSegmentStartEvent) and ev.segment_id == "response":
+            sentence1_started.set()
+
     agent = SessionAgent(
         session_id=session_id,
         tutor_service=tutor_service,  # type: ignore[arg-type]
         tts=tts,
         stt=stt,
-        data_channel_sink=lambda ev: datachannel_events.append(ev),
+        data_channel_sink=handle_datachannel_event,
     )
     await agent.initialize()
 
@@ -224,9 +231,9 @@ async def test_session_agent_stage_2_interrupt_cancels_and_dispatches_qa():
         yield SayEvent(text="Sentence 1 that will be interrupted.")
         yield SayEvent(text="Sentence 2 that should never play.")
 
-    # Start initial lecture
+    # Start initial lecture and wait deterministically for response playback to begin
     initial_task = asyncio.create_task(agent.play_turn_events(initial_lecture()))
-    await asyncio.sleep(0.01)
+    await asyncio.wait_for(sentence1_started.wait(), timeout=1.0)
 
     # Student asks real question
     agent.barge_in.on_vad_speech_start(1000.0)

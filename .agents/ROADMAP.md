@@ -1,18 +1,18 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 4 — Explicit 5-state Pedagogical FSM & 4,000-token budget assembler
-- **Status:** Phase 3 PASSED (operator-verified 2026-11-23: verify.sh --full exit 0, 9 steps, 43 pytest green; parser built tests-first with a recorded 12-test fail-first run; operator fail-without-change audit passed — splitting on the last colon instead of the first fails 3 parser tests incl. the math-colons case; router failover semantics reviewed line by line)
-- **Last Verified Commit:** phase-3-router branch push (base: main after PR #2 merge)
-- **Next Concrete Task:** Phase 4 FSM (ONBOARDING, TEACH_STEP, MICRO_CHECK, INTERRUPT_QA, RECAP) wiring the Phase 3 router + parser to the Phase 2 scoped RAG, with the 4,000-token per-turn budget assembler.
-- **Open Blockers / Manual Checks Needed:** Live provider streaming is still unverified end to end (keys live in the operator vault, not the app env; both keys were proven with live non-streaming calls in Phase 2). gemini-3.8-flash 503s observed 2026-11-23; the router treats Gemini 503 as failover-eligible. Merge policy RESOLVED 2026-11-23: autonomous open+merge for ai-tutor ONLY.
+- **Active Phase:** Phase 5 — LiveKit voice transport, server Kokoro TTS & two-stage barge-in
+- **Status:** Phase 4 PASSED (2026-11-23: verify.sh --full exit 0, 9 steps, 54 pytest green incl. the full-chapter simulation gate; reviewed under the NEW flow — a fresh Opus reviewer agent found and fixed issues (missing semantic board-summary helper, transaction commit gaps in service/simulate/tests, deferral wording), then its own verify passed; operator re-ran verify.sh --full independently: exit 0, 54 passed. The reviewer's itemized findings report was cut off by the Antigravity quota limit (429, resets ~19:50 PKT 2026-11-23); fixes are in the tree and verified, the severity list itself was not recovered.
+- **Last Verified Commit:** phase-4-fsm branch push (base: main after PR #3 merge)
+- **Next Concrete Task:** Phase 5 LiveKit voice transport + Kokoro TTS + two-stage barge-in (STOP-FOR-TEST-REVIEW: Whisper backchannel guard). Needs the LiveKit Cloud account from Malik's provisioning list; Antigravity quota resets ~19:50 PKT 2026-11-23.
+- **Open Blockers / Manual Checks Needed:** Live provider streaming still unverified end to end (keys in the operator vault, not the app env; both keys proven with live non-streaming calls in Phase 2). gemini-3.8-flash 503s observed 2026-11-23; the router treats Gemini 503 as failover-eligible. Merge policy RESOLVED 2026-11-23: autonomous open+merge for ai-tutor ONLY. Review flow CHANGED 2026-11-23 (tutor only): fresh Antigravity reviewer agent per phase, Jewel browser-tests + checks executed evidence, no line-by-line review by Jewel.
 
 ---
 ## Phase Index & Core TDD Checkpoints
 - [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
 - [x] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector — PASSED 2026-11-23
 - [x] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]** — PASSED 2026-11-23
-- [ ] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler
+- [x] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler — PASSED 2026-11-23
 - [ ] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**
 - [ ] **Phase 6:** Excalidraw native-SVG whiteboard, spatial allocator & circle-to-ask **[STOP-FOR-TEST-REVIEW: spatial whiteboard allocator]**
 - [ ] **Phase 7:** Sample-accurate playout clock sync & barge-in rollback **[STOP-FOR-TEST-REVIEW: playout clock scheduler]**

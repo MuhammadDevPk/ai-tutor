@@ -517,6 +517,10 @@ export interface components {
             created_at: string;
             /** Current Node Path */
             current_node_path: string;
+            /** Fsm Data */
+            fsm_data?: {
+                [key: string]: unknown;
+            };
             /**
              * Fsm State
              * @default ONBOARDING

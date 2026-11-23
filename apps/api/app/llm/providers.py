@@ -17,7 +17,9 @@ def _clean_no_proxy_ipv6() -> None:
         val = os.environ.get(var)
         if val:
             os.environ[var] = ",".join(
-                p.strip() for p in val.split(",") if ":" not in p and p.strip()
+                p.strip()
+                for p in val.split(",")
+                if (p.count(":") <= 1 and not p.strip().startswith("[")) and p.strip()
             )
 
 
@@ -109,21 +111,41 @@ class GroqProvider:
 
                     async for line in resp.aiter_lines():
                         line = line.strip()
-                        if not line or not line.startswith("data: "):
+                        if not line or not line.startswith("data:"):
                             continue
-                        data_str = line[6:].strip()
+                        data_str = line[5:].strip()
                         if data_str == "[DONE]":
                             break
                         try:
                             chunk = json.loads(data_str)
-                            choices = chunk.get("choices", [])
-                            if choices:
-                                delta = choices[0].get("delta", {})
-                                content = delta.get("content")
-                                if content:
-                                    yield content
                         except json.JSONDecodeError:
                             continue
+
+                        if "error" in chunk:
+                            err = chunk["error"]
+                            err_msg = (
+                                err.get("message")
+                                if isinstance(err, dict)
+                                else str(err)
+                            )
+                            code = err.get("code") if isinstance(err, dict) else None
+                            status_code = (
+                                429
+                                if code == "rate_limit_exceeded"
+                                or "rate limit" in str(err_msg).lower()
+                                else None
+                            )
+                            raise ProviderError(
+                                f"Groq stream error: {err_msg}",
+                                status_code=status_code,
+                            )
+
+                        choices = chunk.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            content = delta.get("content")
+                            if content:
+                                yield content
         except ProviderError:
             raise
         except httpx.HTTPStatusError as e:
@@ -131,8 +153,8 @@ class GroqProvider:
                 f"Groq HTTP status error: {e}",
                 status_code=e.response.status_code,
             ) from e
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
-            raise ProviderError(f"Groq network/timeout error: {e}") from e
+        except (httpx.RequestError, httpx.HTTPError) as e:
+            raise ProviderError(f"Groq network/protocol/timeout error: {e}") from e
 
 
 class GeminiProvider:
@@ -196,21 +218,55 @@ class GeminiProvider:
 
                     async for line in resp.aiter_lines():
                         line = line.strip()
-                        if not line or not line.startswith("data: "):
+                        if not line or not line.startswith("data:"):
                             continue
-                        data_str = line[6:].strip()
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
                         try:
                             chunk = json.loads(data_str)
-                            candidates = chunk.get("candidates", [])
-                            if candidates:
-                                cand_0 = candidates[0]
-                                parts = cand_0.get("content", {}).get("parts", [])
-                                for part in parts:
-                                    text = part.get("text")
-                                    if text:
-                                        yield text
                         except json.JSONDecodeError:
                             continue
+
+                        if "error" in chunk:
+                            err = chunk["error"]
+                            err_msg = (
+                                err.get("message")
+                                if isinstance(err, dict)
+                                else str(err)
+                            )
+                            code = err.get("code") if isinstance(err, dict) else None
+                            raise ProviderError(
+                                f"Gemini stream error: {err_msg}",
+                                status_code=code,
+                            )
+
+                        feedback = chunk.get("promptFeedback")
+                        if isinstance(feedback, dict) and feedback.get("blockReason"):
+                            raise ProviderError(
+                                f"Gemini blocked prompt: {feedback.get('blockReason')}",
+                                status_code=400,
+                            )
+
+                        candidates = chunk.get("candidates", [])
+                        if candidates:
+                            cand_0 = candidates[0]
+                            finish_reason = cand_0.get("finishReason")
+                            if finish_reason in (
+                                "SAFETY",
+                                "RECITATION",
+                                "BLOCKLIST",
+                                "PROHIBITED_CONTENT",
+                            ):
+                                raise ProviderError(
+                                    f"Gemini generation blocked: {finish_reason}",
+                                    status_code=400,
+                                )
+                            parts = cand_0.get("content", {}).get("parts", [])
+                            for part in parts:
+                                text = part.get("text")
+                                if text:
+                                    yield text
         except ProviderError:
             raise
         except httpx.HTTPStatusError as e:
@@ -218,8 +274,8 @@ class GeminiProvider:
                 f"Gemini HTTP status error: {e}",
                 status_code=e.response.status_code,
             ) from e
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
-            raise ProviderError(f"Gemini network/timeout error: {e}") from e
+        except (httpx.RequestError, httpx.HTTPError) as e:
+            raise ProviderError(f"Gemini network/protocol/timeout error: {e}") from e
 
 
 class OllamaProvider:
@@ -269,11 +325,18 @@ class OllamaProvider:
                             continue
                         try:
                             chunk = json.loads(line)
-                            content = chunk.get("message", {}).get("content", "")
-                            if content:
-                                yield content
                         except json.JSONDecodeError:
                             continue
+
+                        if "error" in chunk:
+                            raise ProviderError(
+                                f"Ollama stream error: {chunk['error']}",
+                                status_code=500,
+                            )
+
+                        content = chunk.get("message", {}).get("content", "")
+                        if content:
+                            yield content
         except ProviderError:
             raise
         except httpx.HTTPStatusError as e:
@@ -281,8 +344,8 @@ class OllamaProvider:
                 f"Ollama HTTP status error: {e}",
                 status_code=e.response.status_code,
             ) from e
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
-            raise ProviderError(f"Ollama network/timeout error: {e}") from e
+        except (httpx.RequestError, httpx.HTTPError) as e:
+            raise ProviderError(f"Ollama network/protocol/timeout error: {e}") from e
 
 
 @dataclass

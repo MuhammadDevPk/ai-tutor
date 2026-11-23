@@ -205,3 +205,254 @@ def test_custom_providers_large_hint_reordering():
     models = [p.model for p in large_providers]
     assert models == ["openai/gpt-oss-120b", "gemini-3.8-flash"]
     assert "openai/gpt-oss-20b" not in models
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_fails_over_to_next_provider():
+    """A provider returning 0 deltas fails over to next healthy provider."""
+    p1 = FakeProvider(
+        name="groq",
+        model="openai/gpt-oss-20b",
+        deltas=[],  # 0 deltas returned
+    )
+    p2 = FakeProvider(
+        name="groq",
+        model="openai/gpt-oss-120b",
+        deltas=["Response after empty failover"],
+    )
+    router = LLMRouter(providers=[p1, p2])
+
+    messages = [ChatMessage(role="user", content="Explain variance")]
+    deltas = [d.text async for d in router.stream(messages)]
+
+    assert deltas == ["Response after empty failover"]
+    event_types = [e.event_type for e in router.events]
+    assert event_types == ["try", "failover", "try", "success"]
+    assert "empty response" in (router.events[1].error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_all_providers_exhausted_raises_provider_error():
+    """When all providers fail or return 429, ProviderError is raised."""
+    p1 = FakeProvider(
+        name="groq",
+        model="openai/gpt-oss-20b",
+        fail_status_code=429,
+        fail_after_n_deltas=0,
+    )
+    p2 = FakeProvider(
+        name="gemini",
+        model="gemini-3.8-flash",
+        fail_status_code=503,
+        fail_after_n_deltas=0,
+    )
+    router = LLMRouter(providers=[p1, p2])
+
+    messages = [ChatMessage(role="user", content="Hello")]
+    with pytest.raises(ProviderError):
+        async for _ in router.stream(messages):
+            pass
+
+    event_types = [e.event_type for e in router.events]
+    assert event_types == ["try", "failover", "try", "failover"]
+
+
+@pytest.mark.asyncio
+async def test_http_status_error_extracts_status_code_for_hard_fail():
+    """An exception with response.status_code=403 triggers hard_fail immediately."""
+    import httpx
+
+    class FailingProvider:
+        name = "mock"
+        model = "mock-model"
+
+        async def stream(self, messages):
+            if False:
+                yield ""
+            req = httpx.Request(
+                "POST", "https://api.groq.com/openai/v1/chat/completions"
+            )
+            resp = httpx.Response(403, request=req)
+            raise httpx.HTTPStatusError("Forbidden", request=req, response=resp)
+
+    p1 = FailingProvider()
+    p2 = FakeProvider(
+        name="groq", model="openai/gpt-oss-120b", deltas=["Never reached"]
+    )
+    router = LLMRouter(providers=[p1, p2])
+
+    messages = [ChatMessage(role="user", content="Hello")]
+    with pytest.raises(httpx.HTTPStatusError):
+        async for _ in router.stream(messages):
+            pass
+
+    event_types = [e.event_type for e in router.events]
+    assert event_types == ["try", "hard_fail"]
+    assert router.events[1].status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_empty_deltas_do_not_block_failover():
+    """Empty string deltas do not count toward emitted content; failover succeeds."""
+    p1 = FakeProvider(
+        name="groq",
+        model="openai/gpt-oss-20b",
+        deltas=["", ""],  # only empty deltas
+        fail_status_code=500,
+        fail_after_n_deltas=1,
+    )
+    p2 = FakeProvider(
+        name="groq",
+        model="openai/gpt-oss-120b",
+        deltas=["Real text after empty deltas"],
+    )
+    router = LLMRouter(providers=[p1, p2])
+
+    messages = [ChatMessage(role="user", content="Hello")]
+    deltas = [d.text async for d in router.stream(messages)]
+    assert deltas == ["Real text after empty deltas"]
+    event_types = [e.event_type for e in router.events]
+    assert event_types == ["try", "failover", "try", "success"]
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_sse_parsing_and_done():
+    """GroqProvider parses both 'data: ' and 'data:' SSE lines and breaks on [DONE]."""
+    import httpx
+
+    from app.llm.providers import GroqProvider
+
+    sse_body = (
+        'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+        'data:{"choices": [{"delta": {"content": " world"}}]}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request):
+        return httpx.Response(
+            200, text=sse_body, headers={"content-type": "text/event-stream"}
+        )
+
+    transport = httpx.MockTransport(handler)
+    provider = GroqProvider(model="openai/gpt-oss-20b", api_key="fake-key")
+
+    # Monkeypatch AsyncClient to use mock transport
+    orig_client = httpx.AsyncClient
+    try:
+
+        def mock_client_factory(*args, **kwargs):
+            kwargs["transport"] = transport
+            return orig_client(*args, **kwargs)
+
+        httpx.AsyncClient = mock_client_factory
+        results = [
+            d async for d in provider.stream([ChatMessage(role="user", content="Hi")])
+        ]
+        assert results == ["Hello", " world"]
+    finally:
+        httpx.AsyncClient = orig_client
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_error_in_sse_raises():
+    """GroqProvider raises ProviderError when error payload is received in SSE body."""
+    import httpx
+
+    from app.llm.providers import GroqProvider
+
+    sse_body = (
+        'data: {"error": {"message": "Rate limit exceeded", '
+        '"code": "rate_limit_exceeded"}}\n\n'
+    )
+
+    def handler(request):
+        return httpx.Response(
+            200, text=sse_body, headers={"content-type": "text/event-stream"}
+        )
+
+    transport = httpx.MockTransport(handler)
+    provider = GroqProvider(model="openai/gpt-oss-20b", api_key="fake-key")
+
+    orig_client = httpx.AsyncClient
+    try:
+
+        def mock_client_factory(*args, **kwargs):
+            kwargs["transport"] = transport
+            return orig_client(*args, **kwargs)
+
+        httpx.AsyncClient = mock_client_factory
+        with pytest.raises(ProviderError) as exc_info:
+            async for _ in provider.stream([ChatMessage(role="user", content="Hi")]):
+                pass
+        assert exc_info.value.status_code == 429
+        assert "Rate limit exceeded" in exc_info.value.message
+    finally:
+        httpx.AsyncClient = orig_client
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_safety_block_raises():
+    """GeminiProvider raises ProviderError(status_code=400) on SAFETY block."""
+    import httpx
+
+    from app.llm.providers import GeminiProvider
+
+    sse_body = 'data: {"candidates": [{"finishReason": "SAFETY"}]}\n\n'
+
+    def handler(request):
+        return httpx.Response(
+            200, text=sse_body, headers={"content-type": "text/event-stream"}
+        )
+
+    transport = httpx.MockTransport(handler)
+    provider = GeminiProvider(model="gemini-3.8-flash", api_key="fake-key")
+
+    orig_client = httpx.AsyncClient
+    try:
+
+        def mock_client_factory(*args, **kwargs):
+            kwargs["transport"] = transport
+            return orig_client(*args, **kwargs)
+
+        httpx.AsyncClient = mock_client_factory
+        with pytest.raises(ProviderError) as exc_info:
+            async for _ in provider.stream([ChatMessage(role="user", content="Hi")]):
+                pass
+        assert exc_info.value.status_code == 400
+        assert "SAFETY" in exc_info.value.message
+    finally:
+        httpx.AsyncClient = orig_client
+
+
+@pytest.mark.asyncio
+async def test_ollama_provider_error_in_body_raises():
+    """OllamaProvider raises ProviderError on error in response body."""
+    import httpx
+
+    from app.llm.providers import OllamaProvider
+
+    body = '{"error": "model not found"}\n'
+
+    def handler(request):
+        return httpx.Response(
+            200, text=body, headers={"content-type": "application/x-ndjson"}
+        )
+
+    transport = httpx.MockTransport(handler)
+    provider = OllamaProvider(model="qwen3.8-27b", base_url="http://localhost:11434")
+
+    orig_client = httpx.AsyncClient
+    try:
+
+        def mock_client_factory(*args, **kwargs):
+            kwargs["transport"] = transport
+            return orig_client(*args, **kwargs)
+
+        httpx.AsyncClient = mock_client_factory
+        with pytest.raises(ProviderError) as exc_info:
+            async for _ in provider.stream([ChatMessage(role="user", content="Hi")]):
+                pass
+        assert exc_info.value.status_code == 500
+        assert "model not found" in exc_info.value.message
+    finally:
+        httpx.AsyncClient = orig_client

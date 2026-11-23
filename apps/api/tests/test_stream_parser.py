@@ -61,11 +61,7 @@ def test_empty_lines_skipped():
 
 def test_invalid_json_degrades_to_ctrl_error():
     """Invalid JSON in PLOT, DIAGRAM, and CTRL degrades to CtrlEvent without raising."""
-    text = (
-        "PLOT: {not valid json\n"
-        "DIAGRAM: [unclosed array\n"
-        "CTRL: broken payload\n"
-    )
+    text = "PLOT: {not valid json\nDIAGRAM: [unclosed array\nCTRL: broken payload\n"
     events = parse_stream(text)
     assert len(events) == 3
     assert events[0] == CtrlEvent(
@@ -148,9 +144,7 @@ def test_interleaved_directives_keep_order():
         LatexEvent(latex=r"P(A|B) = \frac{P(B|A)P(A)}{P(B)}"),
         PlotEvent(spec={"expression": "1/(1+exp(-x))"}),
         ClearEvent(),
-        CtrlEvent(
-            payload={"action": "advance_subtopic", "target": "sta301.ch01.t02"}
-        ),
+        CtrlEvent(payload={"action": "advance_subtopic", "target": "sta301.ch01.t02"}),
     ]
 
 
@@ -174,4 +168,54 @@ def test_multiple_lines_in_single_delta():
         SayEvent(text="First line"),
         LatexEvent(latex=r"\alpha + \beta"),
         ClearEvent(),
+    ]
+
+
+def test_say_line_sanitizes_math_delimiters_and_commands():
+    """SAY lines strip $$...$$, $...$, and stray backslash commands before TTS."""
+    text = (
+        r"SAY: As seen in $x^2 + y^2 = 1$, the mean is \bar{x} and value is $$z$$."
+        "\n"
+    )
+    events = parse_stream(text)
+    assert len(events) == 1
+    assert isinstance(events[0], SayEvent)
+    assert events[0].text == "As seen in x^2 + y^2 = 1, the mean is x and value is z."
+
+
+def test_unclosed_dollar_sign_stripped_from_say():
+    """Unclosed or accidental dollar signs are stripped before TTS."""
+    text = "SAY: Note that $x is greater than 0.\n"
+    events = parse_stream(text)
+    assert len(events) == 1
+    assert events[0] == SayEvent(text="Note that x is greater than 0.")
+
+
+def test_say_payload_containing_directive_keywords_and_colons():
+    """A SAY payload containing colons and directive names is preserved intact."""
+    text = "SAY: Remember: LATEX: is a directive, not plain text.\n"
+    events = parse_stream(text)
+    assert len(events) == 1
+    assert events[0] == SayEvent(
+        text="Remember: LATEX: is a directive, not plain text."
+    )
+
+
+def test_empty_directives_ignored():
+    """Empty SAY and LATEX directives without payload emit no events."""
+    text = "LATEX:\nSAY:\nLATEX:   \n"
+    events = parse_stream(text)
+    assert events == []
+
+
+def test_split_crlf_across_deltas():
+    """CRLF split across feed chunk boundaries is handled cleanly."""
+    parser = LineStreamParser()
+    events = []
+    events.extend(parser.feed("SAY: first line\r"))
+    assert events == []
+    events.extend(parser.feed("\nSAY: second line\r\n"))
+    assert events == [
+        SayEvent(text="first line"),
+        SayEvent(text="second line"),
     ]

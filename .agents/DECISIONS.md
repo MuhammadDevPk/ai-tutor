@@ -1,7 +1,13 @@
-# AI Tutor — Decisions Log
+# DECISIONS.md — Calibrated Constants & Promoted Rules
 
-Append-only log of calibrated runtime constants discovered during live testing
-(VAD thresholds, silence padding, bucket rotation thresholds, latency figures).
-Every entry: date, constant, value, and the test that produced it.
+## Pre-Phase Grill Decisions (Append per Phase)
+- Phase 1: (pending)
 
-<!-- No entries yet. First entries expected during Phase 5 room-acoustic calibration. -->
+## Calibrated Runtime Constants (Measured Values Only)
+- [ ] Silero VAD base threshold vs. elevated speaking-gate threshold
+- [ ] Observed P50/P95 latencies per hop (VAD -> Whisper -> Groq -> Kokoro -> Client)
+- [ ] Verified Groq model-bucket rotation threshold (default: rotate below 4,500 remaining TPM)
+- [ ] Measured TalkingHead 30fps CPU % and FLIP duration on local laptop
+
+## Promoted Harness Rules (Add Only After Same Mistake Repeats Twice)
+- *(Empty — add only recurring defects; delete any rule that never triggers.)*

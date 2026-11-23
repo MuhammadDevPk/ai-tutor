@@ -1,178 +1,254 @@
-# AI Tutor — Roadmap (harness)
+# ROADMAP.md — Active State & Phase Gates
 
-> Extracted verbatim from IMPLEMENTATION-PLAN.md, Sections 4 and 6.
-> Execute one phase at a time. A phase is done only when every one of its Verification Gates passes.
+## Current Session Handoff (Update at End of Every Session)
+- **Active Phase:** Phase 1 — Repository Scaffold & Single-Owner Schema
+- **Status:** NOT_STARTED | GRILL_DONE | TESTS_APPROVED | IN_PROGRESS | PASSED
+- **Last Verified Commit:** `<git-sha>` (`./scripts/verify.sh --full` exit 0)
+- **Next Concrete Task:** Run Pre-Phase 1 Grill, then bootstrap `apps/web`, `apps/api`, and Alembic migration 001
+- **Open Blockers / Manual Checks Needed:** None
 
-## 4. Complete 10-Phase Implementation Plan (AI-Agent Execution Spec)
+---
+## Phase Index & Core TDD Checkpoints
+- [ ] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]**
+- [ ] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector
+- [ ] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]**
+- [ ] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler
+- [ ] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**
+- [ ] **Phase 6:** Excalidraw native-SVG whiteboard, spatial allocator & circle-to-ask **[STOP-FOR-TEST-REVIEW: spatial whiteboard allocator]**
+- [ ] **Phase 7:** Sample-accurate playout clock sync & barge-in rollback **[STOP-FOR-TEST-REVIEW: playout clock scheduler]**
+- [ ] **Phase 8:** TalkingHead 3D avatar (30fps) & GPU FLIP Full-to-PiP transitions
+- [ ] **Phase 9:** Reload persistence, interactive timeline replay & cheat-sheet exports
+- [ ] **Phase 10:** 45-minute soak test, 429 chaos drill, Supabase keep-alive & $0 deploy
 
-Hand your AI coding tool one phase at a time, requiring it to pass every Verification Gate before starting the next phase.
+---
+## Detailed Phase Specifications & Verification Gates (v2 plan, Section 4)
+
+## 4. Complete 10-Phase AI-Agent Implementation Plan
+
+Feed these phases to your coding agent sequentially. Each phase specifies what to build, the exact edge cases that must be handled, and the objective verification gates required before advancing.
 
 ### Phase 1: Repository Scaffold, .agents/ Harness & Single-Owner Schema
 
-**Scope:** Establish the monorepo structure, agent guardrails, Supabase PostgreSQL schema, and automated OpenAPI contract sync.
+**Goal & Dependency:** Establish the monorepo, agent guardrails, Supabase PostgreSQL schema, and typed FastAPI-to-Next.js API contract pipeline with zero local database containers.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Create pnpm monorepo with apps/web (Next.js 16, React 19, Tailwind Light Mode) and apps/api (Python 3.11+ uv, FastAPI, Alembic, psycopg3).
-- Write .agents/ARCHITECTURE.md and .agents/PATTERNS.md containing Sections 1–3 of this plan verbatim so every future AI coding session obeys all seven invariants and the Do-Not-Build list.
-- Provision Supabase PostgreSQL Free Tier and run Alembic migration 001 enabling vector and ltree extensions plus all five core tables and GiST/HNSW indexes.
-- Define Pydantic v2 schemas for all REST endpoints and DataChannel wire events in apps/api, and configure openapi-typescript to generate strongly typed frontend clients into apps/web.
-- Implement lightweight auth/session protection and course CRUD endpoints.
+- Initialize the pnpm workspace (apps/web) with Next.js 16, React 19, strict TypeScript, and Light Mode Tailwind design tokens.
+- Initialize the uv Python project (apps/api) with FastAPI, Pydantic v2, psycopg3, and Alembic.
+- Populate .agents/ARCHITECTURE.md, .agents/PATTERNS.md, and .agents/ROADMAP.md with the locked topology, seven invariants, and Do-Not-Build list.
+- Author Alembic migration 001 enabling vector and ltree extensions, creating all five tables (courses, syllabus_nodes, document_chunks, tutor_sessions, session_events), and attaching GiST indexes on ltree paths and an HNSW cosine index on 384d embeddings.
+- Define Pydantic v2 schemas for course CRUD, syllabus inspection, session lifecycle, and all eight DataChannel event types; wire an automated openapi-typescript script generating typed clients and Zod validators into apps/web.
+- Implement lightweight session/JWT authentication protecting all API routes and course CRUD endpoints.
+
+**Required Behaviors & Edge Cases:**
+
+- All database queries use parameterized async psycopg3 pools connected to Supabase; no ORM or Postgres driver exists in apps/web.
+- Include a reusable repository helper that enforces the PostgreSQL ltree ancestor containment filter on every curriculum and chunk query so unscoped queries cannot be written accidentally.
 
 **Verification Gates:**
 
-- Next.js and FastAPI boot locally with zero Docker Postgres or Redis containers running.
-- Database integration test confirms ltree ancestor filtering isolates Chapter 1 from Chapter 2 with zero leakage.
-- Modifying a Pydantic schema updates frontend TypeScript types via a single pnpm script with zero compile errors.
+- Both apps/web and apps/api start locally with zero Docker Postgres or Redis containers running.
+- Integration test inserting mock Chapter 1 and Chapter 2 nodes verifies that querying with Chapter 1's path returns zero Chapter 2 rows in under 10ms.
+- Adding a test field to a Pydantic schema and running the contract sync command updates apps/web TypeScript types cleanly with zero compiler errors.
 
 ### Phase 2: Math-Aware PDF Ingestion & Scoped RAG Pipeline
 
-**Scope:** Transform raw university PDF handouts (math, statistics, physics) into structured, formula-intact syllabus trees and chapter-fenced embeddings.
+**Goal & Dependency:** Convert real university math, statistics, and physics handouts into formula-intact syllabus trees and strictly subtopic-bounded vector chunks. Depends on Phase 1.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Build an async FastAPI ingestion pipeline using PyMuPDF4LLM or Docling to extract clean Markdown and intact LaTeX equations.
-- Add a selective fallback routing only scanned or broken-formula pages to gemini-3.8-flash Vision (free tier) for clean LaTeX recovery.
-- Build a Curriculum Tree Extractor using gemini-3.8-flash (long-context free tier) on extracted headings/Table of Contents to populate syllabus_nodes (ltree paths, learning objectives, and <=250-token summaries).
-- Build a Formula-Preserving Chunker that never crosses subtopic boundaries or splits display math blocks, generates 384-dim embeddings locally via fastembed (BAAI/bge-small-en-v1.5), and bulk-inserts into Supabase document_chunks.
-- Build the Light Mode Course & Syllabus Inspector UI in Next.js supporting PDF upload, ingestion status tracking, manual heading edits, and a "Start Chapter" button.
+- Async FastAPI background ingestion pipeline using PyMuPDF4LLM or Docling to parse PDFs into clean Markdown while preserving mathematical notation.
+- Selective Vision fallback detector that flags pages with low extractable text density, broken symbol glyphs, or rasterized equation blocks and routes only those pages to gemini-3.8-flash Vision for clean LaTeX extraction.
+- Curriculum Tree Extractor passing extracted headings and Table of Contents to gemini-3.8-flash (long-context free tier) to produce a validated syllabus_nodes hierarchy with canonical ltree paths (for example, sta301.ch01.t02_mean), learning objectives, key formulas, and summaries capped at 250 tokens.
+- Formula-Preserving Chunker that splits text strictly within single subtopic boundaries, keeps display math blocks unbroken, stores raw LaTeX arrays alongside Markdown, embeds locally on CPU via fastembed (BAAI/bge-small-en-v1.5, 384d), and bulk-loads document_chunks.
+- Light Mode Course & Syllabus Inspector UI in apps/web supporting PDF upload, live ingestion progress polling, navigable chapter/subtopic tree, math formula preview, manual heading correction, and a "Start Chapter" launcher.
+
+**Required Behaviors & Edge Cases:**
+
+- Never allow a single chunk to span two chapters or subtopics.
+- Sanitize extracted headings into valid PostgreSQL ltree labels (alphanumeric and underscores only) so malformed PDF titles never fail database inserts.
+- Make ingestion idempotent per uploaded document so retrying a failed PDF replaces partial nodes cleanly rather than duplicating chunks.
 
 **Verification Gates:**
 
-- Uploading a real multi-chapter university handout renders an accurate hierarchical syllabus tree with readable math previews.
-- Automated retrieval test locked to Chapter 1 returns 0 chunks from Chapters 2+ even on queries containing strong keywords from later chapters.
+- Upload a multi-chapter university handout (such as a Statistics or Calculus PDF); all chapters and subtopics appear accurately in the Syllabus Inspector with intact LaTeX previews.
+- Automated RAG test locked to Chapter 1 using strong Chapter 5 keywords returns zero chunks from Chapters 2 and beyond.
 
 ### Phase 3: Model-Bucket LLM Router & Line-Delimited Stream Parser
 
-**Scope:** Build the rate-limit-resilient multi-provider inference engine and zero-escape streaming directive parser.
+**Goal & Dependency:** Deliver rate-limit-proof, zero-cost streaming inference with byte-accurate LaTeX delivery and zero mid-lecture HTTP 429 outages. Depends on Phase 1.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Build an in-process Python ModelBucketRouter that parses Groq's x-ratelimit-remaining-tokens, x-ratelimit-remaining-requests, and x-ratelimit-reset-tokens headers after every call.
-- Configure single-key model-bucket rotation across openai/gpt-oss-20b (~1,000 tok/s), openai/gpt-oss-120b (~500 tok/s), and qwen/qwen3.8-27b (~450 tok/s), proactively rotating buckets whenever remaining TPM drops below 4,500 — before hitting HTTP 429.
-- Configure automatic cross-provider failover to gemini-3.8-flash / gemini-3.5-flash-lite (free tier) on Groq exhaustion or circuit-breaker trip, and to local Ollama only when cloud endpoints are unreachable.
-- Add an in-process cachetools LRU cache for recurring foundational concept definitions.
-- Implement the Line-Delimited Stream Parser splitting incremental token chunks into SAY:, LATEX:, PLOT:, DIAGRAM:, CLEAR:, and CTRL: directives, paired with a regex math-to-speech fallback sanitizer on SAY: lines.
+- ModelBucketRouter in apps/api/llm implementing a single async streaming interface across three tiers:
+  - Tier 1 (Groq single API key, three independent model buckets): openai/gpt-oss-20b, openai/gpt-oss-120b, and qwen/qwen3.8-27b.
+  - Tier 2 (Google AI Studio free tier): gemini-3.8-flash and gemini-3.5-flash-lite.
+  - Tier 3 (Offline emergency fallback): Local Ollama (invoked only if all cloud tiers fail or are unreachable).
+- In-process sliding-window quota governor that inspects Groq response headers (x-ratelimit-remaining-tokens, x-ratelimit-remaining-requests, x-ratelimit-reset-tokens) after every turn and proactively rotates to the next healthy model bucket whenever remaining TPM falls below 4,500.
+- Per-bucket circuit breaker (trips for 60 seconds after three consecutive timeouts or slow TTFT beyond 2.5 seconds) plus an in-process cachetools LRU cache keyed by normalized (syllabus_path, question_hash) for recurring foundational definitions.
+- Incremental Line-Delimited Stream Parser that buffers partial network chunks until newline boundaries and emits strongly typed directive events (SAY, LATEX, PLOT, DIAGRAM, CLEAR, CTRL), plus a fallback regex math-to-speech sanitizer on every SAY line.
+
+**Required Behaviors & Edge Cases:**
+
+- Preserve raw backslashes inside LATEX: lines verbatim without JSON decoding so \bar, \frac, \text, \nu, and \rho are never corrupted into control characters.
+- Handle malformed or unprefixed lines gracefully (defaulting plain prose to SAY: while stripping accidental inline $ delimiters before TTS).
+- Keep static system prompt prefixes byte-identical across turns to maximize Groq prompt caching (exempt from rate limits) and Gemini 3.8 Flash free context caching.
 
 **Verification Gates:**
 
-- Unit test streaming arbitrary 3-character chunks proves \bar, \frac, \text, \nu, and \rho pass through byte-for-byte with zero control-character corruption.
-- Fault-injection test simulating 429 errors across Groq buckets fails over seamlessly to Gemini Flash with zero dropped turns.
+- Unit test feeding arbitrary 3-character streaming chunks proves all LaTeX backslash commands survive byte-for-byte with zero corruption and zero stray markup leaking into SAY: events.
+- Fault-injection test simulating 429 rate-limit exhaustion across all three Groq model buckets seamlessly fails over to Gemini Flash with zero dropped turns.
 
 ### Phase 4: Explicit Pedagogical FSM & Chapter-Scoped Teaching Engine
 
-**Scope:** Build the ~150-line stateful teacher controller enforcing linear chapter progression, Socratic micro-checks, and interrupt-and-resume tutoring.
+**Goal & Dependency:** Turn the LLM router and scoped RAG store into a disciplined professor that teaches linearly, checks understanding, handles deep counter-questioning, and resumes cleanly. Depends on Phases 2 and 3.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Implement the 5-state Python FSM (ONBOARDING, TEACH_STEP, MICRO_CHECK, INTERRUPT_QA, RECAP) persisting transitions and resume_stack snapshots directly to tutor_sessions JSONB.
-- Implement the Token Budget Assembler strictly capping each turn at <=4,000 tokens with a static cached prefix (leveraging Groq prompt caching and Gemini 3.8 Flash free context caching).
-- Implement the Scope Guardrail Policy instructing the tutor to acknowledge and politely defer off-chapter questions unless the student triggers an explicit chapter switch.
-- Build a headless CLI simulation harness to test full text-mode chapters before connecting audio.
+- Explicit 5-state Python FSM (apps/api/tutor/fsm.py) implementing ONBOARDING, TEACH_STEP, MICRO_CHECK, INTERRUPT_QA, and RECAP, persisting current state, current_node_path, active_turn_id, and resume_stack directly to tutor_sessions JSONB on every transition.
+- Hard 4,000-Token Prompt Budget Assembler enforcing exact per-section ceilings: static cached system prefix (~750 tokens), active subtopic brief (~500 tokens), top-3 ltree-fenced RAG chunks (~900 tokens, truncated at 300 tokens each), semantic whiteboard summary (~300 tokens), rolling 6-turn verbatim window plus 150-token running summary (~1,000 tokens), and concise 30–45 second completion budget (~550 tokens).
+- Scope Guardrail Policy handling off-chapter questions with a brief acknowledgment and polite deferral unless the student explicitly confirms a chapter switch.
+- Headless CLI Text Simulation Harness driving full chapter walkthroughs, simulated mid-step interruptions, and multi-turn counter-questions without needing audio or browser UI.
+
+**Required Behaviors & Edge Cases:**
+
+- When INTERRUPT_QA is entered, push the exact unplayed subpoints and unrendered board operations onto resume_stack; allow unlimited nested follow-up questions until the student confirms understanding, then pop the stack and generate a natural bridging sentence back to the paused step.
+- In MICRO_CHECK, if the student answers incorrectly or expresses confusion, transition back to TEACH_STEP with a remedial-analogy flag rather than advancing order_index.
 
 **Verification Gates:**
 
-- Automated CLI simulation walks through all subtopics of Chapter 1 in order, politely defers an injected Chapter 10 question, resolves a 3-turn counter-question chain inside INTERRUPT_QA, resumes the exact paused subpoint, and emits zero raw LaTeX inside SAY: lines.
+- Automated CLI test completes all subtopics of Chapter 1 in sequence, politely defers an injected Chapter 10 question, resolves a 3-turn counter-question chain inside INTERRUPT_QA, resumes the exact paused subpoint, and produces zero raw LaTeX inside SAY: outputs.
 
 ### Phase 5: LiveKit Voice Transport, Server Kokoro TTS & Two-Stage Barge-In
 
-**Scope:** Stand up real-time full-duplex audio with hardware AEC over laptop speakers and backchannel-safe interruption.
+**Goal & Dependency:** Deliver full-duplex, echo-free voice conversation over laptop speakers with zero headphones and backchannel-safe interruption. Depends on Phase 4.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Build FastAPI endpoint minting scoped LiveKit room JWTs bound to tutor_session_id.
-- Stand up the Python LiveKit Agent Worker subscribing to the student's WebRTC audio track and running local Silero VAD on CPU.
-- Integrate server-side kokoro-onnx (int8) synthesizing SAY: lines sentence-by-sentence into 24kHz mono PCM streamed over a LiveKit remote AudioTrack, prepending a 150ms digital-silence lead-in per turn and pre-caching 3–4 short neutral filler clips (segment_id: "filler").
-- Wire Groq whisper-large-v3-turbo STT (with local faster-whisper offline fallback) into the Two-Stage Barge-In Controller and the Backchannel & Whisper Hallucination Guard, including the 200ms PCM cursor rewind on PLAYOUT_RESUME.
-- Build the minimal Next.js classroom audio shell wiring the remote track strictly to `<audio autoplay playsInline>` with browser echoCancellation, noiseSuppression, and autoGainControl enabled.
+- FastAPI LiveKit token endpoint minting short-lived room JWTs bound to a verified tutor_session_id.
+- Python LiveKit Agent Worker subscribing to the student's WebRTC microphone track and running local CPU Silero VAD.
+- Server-side kokoro-onnx (int8) TTS streamer converting SAY: sentences incrementally into 24kHz mono PCM frames published solely as a LiveKit remote AudioTrack. Pre-synthesize and cache 3–4 short neutral filler clips (segment_id: "filler") in memory at worker startup, and prepend a mandatory 150ms digital-silence frame before every turn.
+- Two-Stage Barge-In Controller:
+  - Stage 1 (Soft Duck): Sustained speech over 200ms at an elevated confidence gate while the teacher is speaking emits PLAYOUT_PAUSE, mutes client audio, freezes the client board clock, and pauses pumping Kokoro PCM without canceling the active LLM task or clearing queued board operations.
+  - STT & Guard: Transcribes the short student utterance via Groq whisper-large-v3-turbo (with local faster-whisper offline fallback) and passes it through the Backchannel & Whisper Hallucination Guard (filtering "okay", "uh-huh", "got it", "haan", "theek hai", empty/single-character transcripts, high no-speech probability, low average log-probability, and classic Whisper silence hallucinations such as "Thank you.", "You", "Bye").
+  - Resume Path: On backchannel or room noise, rewinds Kokoro's PCM read cursor by 200ms (or to the previous clause boundary) and emits PLAYOUT_RESUME with the exact rewind_ms.
+  - Stage 2 (Hard Commit): On a real question, increments active_turn_id, cancels in-flight LLM/TTS tasks within 50ms, broadcasts INTERRUPT_FLUSH, pushes unplayed text and unrendered board ops onto resume_stack, and routes into INTERRUPT_QA.
+- Minimal Next.js Classroom Audio Shell capturing mic audio with echoCancellation, noiseSuppression, and autoGainControl enabled, and playing the remote track strictly through a live HTML audio element (autoplay, playsInline).
+- Latency Masking Trigger sending AVATAR_CUE: thinking immediately upon VAD end-of-speech and playing a cached "filler" clip if real TTS synthesis exceeds 1,100ms.
+
+**Required Behaviors & Edge Cases:**
+
+- Never route audible playback through Web Audio API nodes; keep audible output strictly on the HTML audio element so Chromium and Safari WebRTC AEC reference mixers cancel speaker output cleanly.
+- Log actual VAD energy distribution and tuned thresholds to .agents/DECISIONS.md after room-acoustic calibration.
 
 **Verification Gates:**
 
-- Live 10-minute test over laptop speakers (no headphones) exhibits zero self-interruption feedback loops.
-- Saying "okay", "haan", or coughing during a sentence ducks briefly and resumes cleanly with zero clipped words.
-- Asking a real question stops teacher audio in <200ms, plays a thinking/filler cue if needed, answers accurately within ~1.4–2.0s, and resumes the interrupted lesson upon confirmation.
+- Live 10-minute session over laptop speakers (no headphones) produces zero self-interruption echo loops.
+- Saying "okay", "haan", or coughing mid-sentence ducks briefly and resumes seamlessly with zero clipped or missing half-words.
+- Asking a real question halts teacher audio in under 200ms and delivers a contextual spoken answer in approximately 1.4–2.0 seconds (with thinking/filler cues covering complex turns).
 
 ### Phase 6: Excalidraw Native-SVG Whiteboard, Spatial Allocator & Circle-to-Ask
 
-**Scope:** Render crisp, collision-free math equations and function plots natively inside Excalidraw and let students visually point to confusing steps.
+**Goal & Dependency:** Render crisp, zero-overlap equations and graphs directly inside Excalidraw and allow students to point to confusing steps visually. Depends on Phase 4 (can be tested alongside or immediately after Phase 5).
 
-**Deliverables:**
+**Modules to Build:**
 
-- Implement the backend Spatial Layout Allocator managing the four virtual 1280×720 zones (header, derivation, visual, callout), formula height estimation, and automatic CLEAR_SLIDE pagination.
-- Build the client-side MathJax 3 (mathjax-full tex2svg, fontCache: "none") compiler and function-plot SVG generator producing self-contained Light Mode SVGs with explicit pixel dimensions.
-- Build the Excalidraw Classroom Canvas injecting compiled SVGs natively as image elements tagged with customData (op_id, label, raw LaTeX/expression), plus a bottom slide-history strip for viewing prior slides.
-- Implement Circle-to-Ask Geometry Matching: when the student draws a loop or arrow overlapping an injected element, compute bounding-box intersection client-side and emit BOARD_SELECTION over the DataChannel.
+- Backend Spatial Layout Allocator (apps/api/board/allocator.py) managing the virtual 1280×720 canvas across four non-overlapping zones (header, derivation, visual, callout), estimating bounding heights per LaTeX expression, tracking occupied rectangles, and emitting CLEAR_SLIDE when vertical capacity fills.
+- Client-side MathJax 3 (mathjax-full tex2svg with font caching disabled) compiler and function-plot SVG generator creating standalone, self-contained Light Mode pure-vector SVGs with explicit pixel dimensions and zero external font URLs.
+- Excalidraw Classroom Workspace (apps/web/src/components/classroom) injecting compiled SVGs as native Excalidraw image elements via addFiles and updateScene, tagging every element with customData (op_id, label, raw LaTeX/expression), and providing a bottom slide-history strip to revisit archived slides.
+- Circle-to-Ask Geometry Matcher listening for student freehand strokes or arrows, computing client-side bounding-box overlap against injected Excalidraw elements, highlighting the matched equation, and emitting BOARD_SELECTION over the DataChannel so the next LLM turn knows the exact formula referenced without any screenshot vision API call.
+
+**Required Behaviors & Edge Cases:**
+
+- Serialize the whiteboard's semantic summary (active labels and LaTeX strings only — never raw Excalidraw scene JSON) back into the 300-token whiteboard prompt budget slot.
+- Ensure every injected SVG has transparent or Light Mode crisp contrast and fixed aspect ratios so Excalidraw never squashes tall fractions or wide integrals.
 
 **Verification Gates:**
 
-- A 5-step derivation plus plotted curve renders with zero overlapping boxes and remains razor-sharp at 300% zoom in both Chromium and Safari with zero external font network requests.
-- Panning and zooming produce zero element drift; circling Step 2 and asking "Why does this term appear?" causes the teacher to explain Step 2 specifically.
+- A 5-step mathematical derivation alongside a plotted probability curve renders with zero overlapping elements and stays razor-sharp at 300% zoom in both Chromium and Safari with zero external font network requests in DevTools.
+- Panning and zooming exhibit zero drift; circling Step 2 and asking "What does this symbol mean?" causes the teacher to address Step 2 specifically.
 
 ### Phase 7: Sample-Accurate Playout Clock Sync & Barge-In Rollback
 
-**Scope:** Lock whiteboard appearance tightly to spoken audio and prevent interrupted turns from flashing future steps on screen.
+**Goal & Dependency:** Synchronize whiteboard reveals tightly to spoken audio and guarantee interrupted turns never leak future steps onto the board. Depends on Phases 5 and 6.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Instrument the server Kokoro pipeline to track exact cumulative 24kHz PCM samples per turn_id, stamping playout_offset_ms onto each BoardOp and emitting AUDIO_SEGMENT_START as the first real PCM frame enters LiveKit.
-- Build the client Playout Clock Controller: unconditional silent Web Audio tap (MediaStreamAudioSourceNode -> Analyser/Worklet -> GainNode(0) -> destination), arm-gated RMS onset detector ignoring "filler" segments, pause/rewind delta accounting, op_id deduplication, and turn_id epoch filtering.
-- Build a toggleable Dev Telemetry HUD displaying live turn_id, elapsed_ms, VAD state, active Groq/Gemini model bucket, remaining TPM, and stage-by-stage latency.
+- Server PCM Offset Stamper inside the Kokoro worker tracking cumulative 24kHz PCM samples per turn_id, computing exact playout_offset_ms for every LATEX, PLOT, DIAGRAM, and CLEAR directive at the instant it appears in the stream, sending BOARD_SCHEDULE ahead of audio frames, and emitting AUDIO_SEGMENT_START ("filler" or "response") as the first real PCM frame enters LiveKit.
+- Client Playout Clock Controller establishing the unconditional silent Web Audio tap (remote MediaStream into audio worklet/analyser terminated through a zero-gain node into the audio context destination) so neither Chromium nor Safari suspends processing.
+- Arm-Gated RMS Onset Detector that ignores "filler" segments, arms strictly upon receiving AUDIO_SEGMENT_START with segment_id: "response", anchors turn start time on the first non-silent PCM frame, freezes elapsed time on PLAYOUT_PAUSE, shifts elapsed time backward by rewind_ms on PLAYOUT_RESUME, and releases queued BoardOp items on the exact requestAnimationFrame where elapsed time reaches playout_offset_ms.
+- Epoch & Deduplication Guard rejecting any packet whose turn_id is below active_turn_id, preventing duplicate injection by op_id, and reconciling unrendered operations cleanly with the server's resume_stack.
+- Toggleable Dev Telemetry HUD displaying active turn_id, playout elapsed_ms, VAD state, active LLM bucket, remaining Groq TPM, and per-stage latency timings.
+
+**Required Behaviors & Edge Cases:**
+
+- Handle late DataChannel packets defensively: if a BoardOp arrives after its playout_offset_ms has already passed for the current active turn_id, inject it immediately rather than dropping it.
+- When a student interrupts at Step 1, confirm the client discards Steps 2–4 immediately and reports the last rendered op_id (or server infers it from paused playout time) so resume_stack re-schedules only unrendered steps upon return.
 
 **Verification Gates:**
 
-- Formulas appear within ±150ms of the teacher speaking them, even when a cached filler precedes the main answer.
-- Interrupting during Step 1 halts Steps 2–4 cleanly with zero ghost elements flashing onto the board, and renders them accurately once the lesson resumes.
+- Formulas appear within ±150ms of the teacher speaking them, including on turns preceded by a cached "filler" clip.
+- Interrupting during Step 1 prevents Steps 2–4 from ever flashing on screen, and resuming after Q&A draws Steps 2–4 in exact order.
 
 ### Phase 8: TalkingHead 3D Avatar & GPU FLIP Full-to-PiP Layout Engine
 
-**Scope:** Add an expressive, lip-synced 3D teacher that transitions smoothly between Full Screen and a 200×200px top-right PiP corner without WebGL glitches or loud laptop fans.
+**Goal & Dependency:** Add the lip-synced 3D AI teacher with flicker-free, thermal-safe transitions between Full Screen and the 200×200px top-right PiP whiteboard corner. Depends on Phase 7.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Host one compressed Mixamo-rigged teacher .glb model with ARKit/Oculus viseme blend shapes under apps/web/public/avatars/ (Meshopt-compressed for fast load).
-- Wrap met4citizen/TalkingHead (v1.8.2) in an isolated client component locked to 30fps globally, calling head.dispose() cleanly on route exit.
-- Insert the HeadAudio AudioWorklet into the existing unconditional silent zero-gain Web Audio tap so lip-sync locks to the remote audio track without breaking hardware AEC.
-- Build the GPU FLIP Layout Controller: keeps the WebGL canvas permanently mounted; animates Full ↔ 200×200px top-right PiP exclusively via transform and clip-path, running Three.js renderer sizing and camera reframing once on transitionend. Include a manual layout pin/unpin toggle.
-- Map AVATAR_CUE events (listening, thinking, speaking, idle) to subtle head nods, eye contact, and breathing animations.
+- Isolated AvatarStage React Client Component wrapping met4citizen/TalkingHead (v1.8.2, Three.js r186), loading the local Meshopt-compressed .glb model, capping the render loop strictly at 30fps globally, and invoking head.dispose() on route unmount.
+- HeadAudio AudioWorklet integration plugged directly into Phase 7's existing unconditional silent zero-gain Web Audio tap so visemes track the exact played LiveKit audio without disturbing hardware AEC.
+- GPU FLIP Layout Controller keeping the WebGL canvas mounted permanently at root level; switching between FULL_AVATAR and PIP_WHITEBOARD animates solely transform (translate3d and scale) and clip-path over ~280ms, calling Three.js renderer setSize and subtle head-and-shoulders camera reframing once on transitionend.
+- Manual Layout Pin/Unpin Control emitting LAYOUT_OVERRIDE so students can force Full Avatar, PiP Whiteboard, or Automatic mode anytime.
+- Avatar Expression Mapper translating AVATAR_CUE events (listening, thinking, speaking, idle) into subtle eye contact, head tilt, nodding, and breathing animations.
+
+**Required Behaviors & Edge Cases:**
+
+- Re-compute FLIP transform targets cleanly on browser window resize without tearing down the WebGL context.
+- Keep PiP z-index cleanly layered over Excalidraw without intercepting canvas pointer events outside its 200×200px rounded bounding box.
 
 **Verification Gates:**
 
-- 50 rapid Full ↔ PiP transitions show zero WebGL context loss, zero canvas stretching, synchronized lip-sync, and flat browser heap memory.
-- Sustained laptop CPU stays around 25–35% with fans quiet enough to avoid Silero VAD false triggers.
+- Running 50 rapid Full-to-PiP and PiP-to-Full toggles exhibits zero WebGL context loss, zero canvas stretching, accurate audio-locked lip-sync, and flat heap memory in Chrome DevTools.
+- Sustained CPU utilization on a non-CUDA laptop stays near 25–35% with fan acoustics quiet enough to avoid false Silero VAD triggers.
 
 ### Phase 9: Session Persistence, Interactive Replay & Exam Study Exports
 
-**Scope:** Turn every live tutoring session into durable revision material and protect against browser reloads.
+**Goal & Dependency:** Turn every live tutoring session into permanent, reload-proof study assets for exam preparation. Depends on Phase 8.
 
-**Deliverables:**
+**Modules to Build:**
 
-- Persist Excalidraw scene snapshots and FSM state on every completed turn so refreshing or reopening a chapter restores the exact slide and subtopic cursor.
-- Build the Interactive Session Replayer that scrubs session_events directly on Excalidraw so you can replay any past lecture and copy clean LaTeX formulas.
-- Build One-Click Study Exports: printable Markdown/PDF chapter cheat sheet compiling all whiteboard formulas plus Q&A misconceptions cleared during the session, and optional client-side MediaRecorder WebM video export at $0 server cost.
-- Build a Course Mastery Dashboard showing chapter completion across courses and flagging weak topics with high interruption frequency.
+- Turn-Boundary Snapshot Persistence writing the Excalidraw slide deck snapshot and FSM cursor to tutor_sessions after every completed turn, plus appending structured records to session_events.
+- Reload Recovery Flow restoring the exact active slide, archived slide strip, active chapter lock, and FSM subtopic cursor upon browser refresh or reopening an in-progress session.
+- Interactive Timeline Replayer allowing students to scrub through session_events directly on Excalidraw and copy clean raw LaTeX strings from any formula on the board.
+- One-Click Study Exporter generating a clean, printable Markdown/PDF chapter cheat sheet compiling all board formulas and every misconception cleared during INTERRUPT_QA loops, plus an optional client-side MediaRecorder WebM export at zero server cost.
+- Course Mastery Dashboard displaying chapter completion progress per course and highlighting weak subtopics flagged by frequent INTERRUPT_QA loops.
+
+**Required Behaviors & Edge Cases:**
+
+- Keep Excalidraw scene snapshots compact by storing canonical BoardOp payloads and regenerating SVG data URLs on hydration rather than bloating Postgres JSONB with repeated SVG blobs.
 
 **Verification Gates:**
 
-- Hard-refreshing the browser mid-chapter restores the exact whiteboard slide and resumes from the correct subtopic without repeating completed material.
-- Exporting a completed 15-minute session produces a clean printable formula cheat sheet and a working interactive replay.
+- Hard-refreshing the browser mid-chapter restores the exact whiteboard state and resumes from the correct subtopic without repeating already-taught steps.
+- Exporting a completed 15-minute chapter session produces an accurate formula cheat sheet and a smoothly scrubbable interactive replay.
 
 ### Phase 10: Soak Testing, Chaos Validation & $0 Deployment Hardening
 
-**Scope:** Validate thermal stability, free-tier resilience, and long-term operational reliability before daily academic use.
+**Goal & Dependency:** Prove long-session stability, free-tier resilience, and zero-cost hosting reliability before daily academic use. Depends on Phase 9.
 
-**Deliverables:**
+**Modules to Build:**
 
-- 45-Minute Continuous Soak Test: Study an entire real chapter end-to-end while profiling Chrome WebGL/AudioWorklet memory, end-to-end P50/P95 latency, and local CPU/fan behavior.
-- Chaos & Failover Drill: Intentionally trigger Groq 429 errors mid-lecture, simulate network drops, and verify clean bucket rotation and Gemini Flash failover without dropping the session.
-- Supabase Free-Tier Safeguards: Because Supabase Free Tier pauses projects after 1 week of inactivity and includes no automatic backups, add a lightweight scheduled GitHub Actions keep-alive ping + weekly logical backup export of courses, syllabus_nodes, and session_events.
-- Zero-Cost Deployment Configuration: Prepare deployment manifests for Vercel Hobby (apps/web), Supabase Free Tier (DB), LiveKit Cloud Build Free (media), and either local execution (unlimited personal study) or an Oracle Cloud Always Free ARM VM / Hugging Face Spaces (apps/api + Kokoro worker).
+- End-to-End Latency & Memory Instrumentation recording P50/P95 spans across VAD end, STT, LLM TTFT, TTS first byte, and client audio start, plus a 45-minute soak test script and Chrome heap/WebGL buffer checklist.
+- Chaos & Failover Test Suite simulating mid-lecture Groq 429 exhaustion across all three model buckets, transient network disconnects, and LiveKit reconnection recovery.
+- Supabase Free-Tier Operational Safeguards: scheduled weekly GitHub Actions keep-alive health check (preventing 7-day inactivity auto-pause) and an automated weekly logical export backing up courses, syllabus_nodes, and session_events.
+- Zero-Cost Deployment Manifests targeting Vercel Hobby (apps/web), Supabase Free Tier (PostgreSQL), LiveKit Cloud Build Free (WebRTC media), and either local execution (unlimited personal study) or Oracle Cloud Always Free ARM VM / Hugging Face Spaces (apps/api + Kokoro worker).
+
+**Required Behaviors & Edge Cases:**
+
+- Verify all secrets live strictly in platform environment variables and never leak into Next.js client bundles.
+- Confirm offline Ollama fallback engages cleanly if internet access drops mid-session without crashing the FastAPI worker.
 
 **Verification Gates:**
 
-- Full 45-minute session completes with zero crashes, zero WebGL leaks, zero paid API charges, and verified failover under forced rate-limit exhaustion.
-
-## 6. Realistic Execution Timeline (AI-Native Workflow)
-
-- **Milestone 1 — Voice + Scoped Syllabus Study MVP (Phases 1–5): ~4–5 Weeks.** Upload your handouts, lock strictly to Chapter 1, hold real-time speaker-based voice conversations with two-stage barge-in, and never hit free-tier outages.
-- **Milestone 2 — Synchronized Math Whiteboard + 3D PiP Teacher (Phases 6–8): ~3 Weeks.** Adds collision-free Excalidraw MathJax/function plots, circle-to-ask pointing, sample-accurate audio sync, and the 30fps TalkingHead FLIP PiP teacher.
-- **Milestone 3 — Replay, Cheat Sheets & Hardening (Phases 9–10): ~1–2 Weeks.** Adds reload resilience, interactive lecture scrubbing, printable exam formula sheets, soak testing, and $0 cloud deployment.
+- A continuous 45-minute study session of a real university chapter completes with zero crashes, zero WebGL or AudioWorklet memory growth, zero false fan-noise VAD loops, verified failover under forced 429 injection, and $0 API spend.

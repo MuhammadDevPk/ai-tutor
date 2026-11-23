@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: verify-fast
+        name: Run scripts/verify.sh --fast
+        entry: ./scripts/verify.sh --fast
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -9,13 +9,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 async def login(credentials: LoginRequest) -> TokenResponse:
     dev_user = seed_dev_user()
-    if credentials.email != dev_user["email"]:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not verify_password(credentials.password, dev_user["password_hash"]):
+    email_matches = credentials.email == dev_user["email"]
+    password_valid = verify_password(credentials.password, dev_user["password_hash"])
+    if not (email_matches and password_valid):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

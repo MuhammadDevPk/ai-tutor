@@ -10,8 +10,21 @@ Protocol lines:
 """
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Union
+
+
+def sanitize_say_text(text: str) -> str:
+    """Sanitize SAY text to remove raw LaTeX delimiters and markup before TTS."""
+    if not text:
+        return ""
+    # Strip $$...$$ or $...$
+    cleaned = re.sub(r"\$\$(.*?)\$\$", r"\1", text)
+    cleaned = re.sub(r"\$(.*?)\$", r"\1", cleaned)
+    # Strip common stray backslash math commands if any leak through
+    cleaned = re.sub(r"\\[a-zA-Z]+", "", cleaned)
+    return cleaned.strip()
 
 
 @dataclass(frozen=True)

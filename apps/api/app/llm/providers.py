@@ -2,7 +2,7 @@
 
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -295,10 +295,16 @@ class FakeProvider:
     fail_status_code: int | None = None
     fail_after_n_deltas: int | None = None
     error_message: str = "Simulated provider failure"
+    response_fn: Callable[[list[ChatMessage]], list[str]] | None = None
 
     async def stream(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         if self.fail_after_n_deltas == 0:
             raise ProviderError(self.error_message, status_code=self.fail_status_code)
+
+        if self.response_fn is not None:
+            for delta in self.response_fn(messages):
+                yield delta
+            return
 
         for i, delta in enumerate(self.deltas):
             if self.fail_after_n_deltas is not None and i >= self.fail_after_n_deltas:

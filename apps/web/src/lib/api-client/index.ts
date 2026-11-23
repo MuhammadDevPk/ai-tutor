@@ -20,6 +20,16 @@ export type BoardSelectionEvent = Schemas["BoardSelectionEvent"];
 export type LayoutOverrideEvent = Schemas["LayoutOverrideEvent"];
 export type BoardOp = Schemas["BoardOp"];
 
+export type DataChannelEvent =
+  | AudioSegmentStartEvent
+  | BoardScheduleEvent
+  | PlayoutPauseEvent
+  | PlayoutResumeEvent
+  | InterruptFlushEvent
+  | AvatarCueEvent
+  | BoardSelectionEvent
+  | LayoutOverrideEvent;
+
 export type SyllabusNode = Schemas["SyllabusNodeResponse"];
 export type SyllabusTree = Schemas["SyllabusTreeResponse"];
 export type DocumentChunk = Schemas["DocumentChunkResponse"];

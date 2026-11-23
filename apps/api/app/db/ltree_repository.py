@@ -11,6 +11,7 @@ def sanitize_ltree_path(path: str) -> str:
     """Validates and normalizes an ltree path.
 
     PostgreSQL ltree labels must contain only [A-Za-z0-9_] and be dot-separated.
+    Each label must be 255 characters or fewer.
     Empty, whitespace-only, or malformed paths raise ValueError.
     """
     if not isinstance(path, str) or not path.strip():
@@ -22,6 +23,12 @@ def sanitize_ltree_path(path: str) -> str:
             "PostgreSQL ltree labels must contain only alphanumeric "
             "characters and underscores separated by dots."
         )
+    for label in cleaned.split("."):
+        if len(label) > 255:
+            raise ValueError(
+                f"Invalid ltree path: label '{label[:20]}...' exceeds "
+                "maximum length of 255 characters."
+            )
     return cleaned
 
 
@@ -78,14 +85,14 @@ class ScopedLtreeRepository:
                 "SELECT * FROM document_chunks "
                 "WHERE course_id = %s AND syllabus_path <@ %s::ltree "
                 "AND markdown ILIKE %s "
-                "ORDER BY id LIMIT %s;"
+                "ORDER BY page ASC NULLS LAST, created_at ASC, id ASC LIMIT %s;"
             )
             params = (str(course_id), valid_path, f"%{search_query}%", limit)
         else:
             query = (
                 "SELECT * FROM document_chunks "
                 "WHERE course_id = %s AND syllabus_path <@ %s::ltree "
-                "ORDER BY id LIMIT %s;"
+                "ORDER BY page ASC NULLS LAST, created_at ASC, id ASC LIMIT %s;"
             )
             params = (str(course_id), valid_path, limit)
 

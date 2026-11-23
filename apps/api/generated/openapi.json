@@ -1,0 +1,1092 @@
+{
+  "components": {
+    "schemas": {
+      "AudioSegmentStartEvent": {
+        "properties": {
+          "event_type": {
+            "const": "AUDIO_SEGMENT_START",
+            "default": "AUDIO_SEGMENT_START",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "segment_id": {
+            "description": "'filler' ignores RMS onset; 'response' arms playout onset",
+            "enum": [
+              "filler",
+              "response"
+            ],
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "minimum": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_id",
+          "segment_id"
+        ],
+        "title": "AudioSegmentStartEvent",
+        "type": "object"
+      },
+      "AvatarCueEvent": {
+        "properties": {
+          "cue": {
+            "enum": [
+              "listening",
+              "thinking",
+              "speaking",
+              "idle"
+            ],
+            "title": "Cue",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "AVATAR_CUE",
+            "default": "AVATAR_CUE",
+            "title": "Event Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cue"
+        ],
+        "title": "AvatarCueEvent",
+        "type": "object"
+      },
+      "BoardOp": {
+        "properties": {
+          "op_id": {
+            "description": "Unique operation identifier",
+            "title": "Op Id",
+            "type": "string"
+          },
+          "op_type": {
+            "description": "Operation type e.g. latex, plot, diagram, clear",
+            "title": "Op Type",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "description": "Operation payload e.g. raw LaTeX or SVG expression",
+            "title": "Payload",
+            "type": "object"
+          },
+          "playout_offset_ms": {
+            "default": 0,
+            "description": "Playout offset in ms relative to turn start",
+            "minimum": 0,
+            "title": "Playout Offset Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "op_id",
+          "op_type"
+        ],
+        "title": "BoardOp",
+        "type": "object"
+      },
+      "BoardScheduleEvent": {
+        "properties": {
+          "event_type": {
+            "const": "BOARD_SCHEDULE",
+            "default": "BOARD_SCHEDULE",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "layout_mode": {
+            "default": "standard",
+            "description": "Layout mode for the board",
+            "title": "Layout Mode",
+            "type": "string"
+          },
+          "operations": {
+            "description": "Ordered board operations",
+            "items": {
+              "$ref": "#/components/schemas/BoardOp"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "turn_id": {
+            "minimum": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_id"
+        ],
+        "title": "BoardScheduleEvent",
+        "type": "object"
+      },
+      "BoardSelectionEvent": {
+        "properties": {
+          "event_type": {
+            "const": "BOARD_SELECTION",
+            "default": "BOARD_SELECTION",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "label": {
+            "description": "Semantic label of the referenced formula/element",
+            "title": "Label",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Raw LaTeX or expression payload",
+            "title": "Payload",
+            "type": "string"
+          },
+          "referenced_op_id": {
+            "description": "ID of the circled or clicked board element",
+            "title": "Referenced Op Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "referenced_op_id",
+          "label",
+          "payload"
+        ],
+        "title": "BoardSelectionEvent",
+        "type": "object"
+      },
+      "CourseCreate": {
+        "properties": {
+          "baseline_skill": {
+            "default": "foundational",
+            "examples": [
+              "foundational"
+            ],
+            "maxLength": 100,
+            "title": "Baseline Skill",
+            "type": "string"
+          },
+          "course_code": {
+            "examples": [
+              "STA301",
+              "MTH5101"
+            ],
+            "maxLength": 50,
+            "title": "Course Code",
+            "type": "string"
+          },
+          "title": {
+            "examples": [
+              "Introduction to Mathematical Statistics"
+            ],
+            "maxLength": 255,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_code",
+          "title"
+        ],
+        "title": "CourseCreate",
+        "type": "object"
+      },
+      "CourseListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CourseResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "CourseListResponse",
+        "type": "object"
+      },
+      "CourseResponse": {
+        "properties": {
+          "baseline_skill": {
+            "default": "foundational",
+            "examples": [
+              "foundational"
+            ],
+            "maxLength": 100,
+            "title": "Baseline Skill",
+            "type": "string"
+          },
+          "course_code": {
+            "examples": [
+              "STA301",
+              "MTH5101"
+            ],
+            "maxLength": 50,
+            "title": "Course Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "examples": [
+              "Introduction to Mathematical Statistics"
+            ],
+            "maxLength": 255,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_code",
+          "title",
+          "id",
+          "user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CourseResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InterruptFlushEvent": {
+        "properties": {
+          "event_type": {
+            "const": "INTERRUPT_FLUSH",
+            "default": "INTERRUPT_FLUSH",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "new_turn_id": {
+            "minimum": 0,
+            "title": "New Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "new_turn_id"
+        ],
+        "title": "InterruptFlushEvent",
+        "type": "object"
+      },
+      "LayoutOverrideEvent": {
+        "properties": {
+          "event_type": {
+            "const": "LAYOUT_OVERRIDE",
+            "default": "LAYOUT_OVERRIDE",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "FULL_AVATAR",
+              "PIP_WHITEBOARD",
+              "AUTO"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "LayoutOverrideEvent",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "examples": [
+              "dev@example.com"
+            ],
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "PlayoutPauseEvent": {
+        "properties": {
+          "event_type": {
+            "const": "PLAYOUT_PAUSE",
+            "default": "PLAYOUT_PAUSE",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "turn_id": {
+            "minimum": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_id"
+        ],
+        "title": "PlayoutPauseEvent",
+        "type": "object"
+      },
+      "PlayoutResumeEvent": {
+        "properties": {
+          "event_type": {
+            "const": "PLAYOUT_RESUME",
+            "default": "PLAYOUT_RESUME",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "rewind_ms": {
+            "default": 200,
+            "description": "Rewind amount in ms, default 200ms",
+            "minimum": 0,
+            "title": "Rewind Ms",
+            "type": "integer"
+          },
+          "turn_id": {
+            "minimum": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_id"
+        ],
+        "title": "PlayoutResumeEvent",
+        "type": "object"
+      },
+      "SessionCreate": {
+        "properties": {
+          "active_chapter_path": {
+            "examples": [
+              "ch01"
+            ],
+            "title": "Active Chapter Path",
+            "type": "string"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "current_node_path": {
+            "examples": [
+              "ch01.t01.s01"
+            ],
+            "title": "Current Node Path",
+            "type": "string"
+          },
+          "preferences": {
+            "additionalProperties": true,
+            "title": "Preferences",
+            "type": "object"
+          }
+        },
+        "required": [
+          "course_id",
+          "active_chapter_path",
+          "current_node_path"
+        ],
+        "title": "SessionCreate",
+        "type": "object"
+      },
+      "SessionEventCreate": {
+        "properties": {
+          "event_type": {
+            "examples": [
+              "USER_SPEECH",
+              "AI_SAY",
+              "BOARD_OP",
+              "STATE_CHANGE"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "playout_offset_ms": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Playout Offset Ms",
+            "type": "integer"
+          },
+          "turn_id": {
+            "minimum": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "turn_id",
+          "event_type"
+        ],
+        "title": "SessionEventCreate",
+        "type": "object"
+      },
+      "SessionEventResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "playout_offset_ms": {
+            "title": "Playout Offset Ms",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "turn_id",
+          "event_type",
+          "playout_offset_ms",
+          "payload",
+          "created_at"
+        ],
+        "title": "SessionEventResponse",
+        "type": "object"
+      },
+      "SessionResponse": {
+        "properties": {
+          "active_chapter_path": {
+            "title": "Active Chapter Path",
+            "type": "string"
+          },
+          "active_turn_id": {
+            "default": 0,
+            "title": "Active Turn Id",
+            "type": "integer"
+          },
+          "board_snapshot": {
+            "additionalProperties": true,
+            "title": "Board Snapshot",
+            "type": "object"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_node_path": {
+            "title": "Current Node Path",
+            "type": "string"
+          },
+          "fsm_state": {
+            "default": "ONBOARDING",
+            "title": "Fsm State",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "preferences": {
+            "additionalProperties": true,
+            "title": "Preferences",
+            "type": "object"
+          },
+          "resume_stack": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Resume Stack",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "active_chapter_path",
+          "current_node_path",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SessionResponse",
+        "type": "object"
+      },
+      "SyllabusNodeCreate": {
+        "properties": {
+          "key_formulas": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Formulas",
+            "type": "array"
+          },
+          "mastery_status": {
+            "default": "not_started",
+            "examples": [
+              "not_started",
+              "in_progress",
+              "mastered"
+            ],
+            "title": "Mastery Status",
+            "type": "string"
+          },
+          "node_type": {
+            "examples": [
+              "chapter",
+              "topic",
+              "subtopic"
+            ],
+            "title": "Node Type",
+            "type": "string"
+          },
+          "objectives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Objectives",
+            "type": "array"
+          },
+          "order_index": {
+            "minimum": 0,
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "path": {
+            "examples": [
+              "ch01",
+              "ch01.t01",
+              "ch01.t01.s01"
+            ],
+            "title": "Path",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Compact summary <= 250 tokens",
+            "title": "Summary"
+          },
+          "title": {
+            "maxLength": 255,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "node_type",
+          "order_index",
+          "title"
+        ],
+        "title": "SyllabusNodeCreate",
+        "type": "object"
+      },
+      "SyllabusNodeResponse": {
+        "properties": {
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key_formulas": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Formulas",
+            "type": "array"
+          },
+          "mastery_status": {
+            "default": "not_started",
+            "examples": [
+              "not_started",
+              "in_progress",
+              "mastered"
+            ],
+            "title": "Mastery Status",
+            "type": "string"
+          },
+          "node_type": {
+            "examples": [
+              "chapter",
+              "topic",
+              "subtopic"
+            ],
+            "title": "Node Type",
+            "type": "string"
+          },
+          "objectives": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Objectives",
+            "type": "array"
+          },
+          "order_index": {
+            "minimum": 0,
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "path": {
+            "examples": [
+              "ch01",
+              "ch01.t01",
+              "ch01.t01.s01"
+            ],
+            "title": "Path",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Compact summary <= 250 tokens",
+            "title": "Summary"
+          },
+          "title": {
+            "maxLength": 255,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "node_type",
+          "order_index",
+          "title",
+          "id",
+          "course_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SyllabusNodeResponse",
+        "type": "object"
+      },
+      "SyllabusTreeResponse": {
+        "properties": {
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/SyllabusNodeResponse"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_id",
+          "nodes"
+        ],
+        "title": "SyllabusTreeResponse",
+        "type": "object"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "TokenResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "AI Video Tutor API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/courses": {
+      "get": {
+        "operationId": "list_courses_courses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Courses",
+        "tags": [
+          "courses"
+        ]
+      },
+      "post": {
+        "operationId": "create_course_courses_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Course",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
+    "/courses/{course_id}": {
+      "delete": {
+        "operationId": "delete_course_courses__course_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Course Courses  Course Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Course",
+        "tags": [
+          "courses"
+        ]
+      },
+      "get": {
+        "operationId": "get_course_courses__course_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Course",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

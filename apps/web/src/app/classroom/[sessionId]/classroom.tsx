@@ -16,6 +16,7 @@ import type {
   AudioSegmentStartEvent,
   PlayoutResumeEvent,
   InterruptFlushEvent,
+  LayoutOverrideEvent,
 } from "@/lib/api-client";
 import BoardWorkspace, {
   type BoardOpWithPlacement,
@@ -23,8 +24,19 @@ import BoardWorkspace, {
 import TelemetryHud, {
   type TelemetryData,
 } from "@/components/classroom/TelemetryHud";
+import AvatarStage, {
+  type AvatarStageHandle,
+} from "@/components/classroom/AvatarStage";
+import LayoutPinControl from "@/components/classroom/LayoutPinControl";
 import { PlayoutClock } from "@/lib/board/playoutClock";
 import { createSilentTap, type SilentTapHandle } from "@/lib/audio/silentTap";
+import {
+  type LayoutMode,
+  type EffectiveLayout,
+  resolveEffectiveLayout,
+  createHeadAudioBridge,
+  type HeadAudioBridgeHandle,
+} from "@/lib/avatar";
 
 export default function ClassroomAudioShell({
   sessionId,
@@ -41,6 +53,11 @@ export default function ClassroomAudioShell({
   // Board operations received over LiveKit DataChannel
   const [boardOperations, setBoardOperations] = useState<BoardOpWithPlacement[]>([]);
 
+  // Phase 8: Layout mode, Avatar Cue, and speaking state
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("AUTO");
+  const [avatarCue, setAvatarCue] = useState<string>("idle");
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+
   // Telemetry HUD data
   const [telemetryData, setTelemetryData] = useState<TelemetryData>({
     turnId: 0,
@@ -56,10 +73,37 @@ export default function ClassroomAudioShell({
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const roomRef = useRef<Room | null>(null);
   const silentTapRef = useRef<SilentTapHandle | null>(null);
+  const headAudioRef = useRef<HeadAudioBridgeHandle | null>(null);
+  const avatarStageRef = useRef<AvatarStageHandle | null>(null);
   const playoutClockRef = useRef<PlayoutClock | null>(null);
   const rafIdRef = useRef<number | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  // Resolve effective layout (Full Avatar vs PiP Whiteboard)
+  const effectiveLayout: EffectiveLayout = resolveEffectiveLayout(
+    layoutMode,
+    isSpeaking,
+    boardOperations.length > 0
+  );
+
+  // Handle manual layout mode override
+  const handleLayoutChange = useCallback((newMode: LayoutMode) => {
+    setLayoutMode(newMode);
+    const room = roomRef.current;
+    if (room && room.state === ConnectionState.Connected) {
+      try {
+        const overrideEvent: LayoutOverrideEvent = {
+          event_type: "LAYOUT_OVERRIDE",
+          mode: newMode,
+        };
+        const bytes = new TextEncoder().encode(JSON.stringify(overrideEvent));
+        room.localParticipant.publishData(bytes, { reliable: true });
+      } catch (err) {
+        console.warn("Failed to publish LAYOUT_OVERRIDE over DataChannel:", err);
+      }
+    }
+  }, []);
 
   // Initialize playout clock
   useEffect(() => {
@@ -162,9 +206,13 @@ export default function ClassroomAudioShell({
       }
       case "AVATAR_CUE": {
         const cue = parsed as { cue?: string };
+        const cueVal = cue.cue || "idle";
+        setAvatarCue(cueVal);
+        setIsSpeaking(cueVal === "speaking");
+        avatarStageRef.current?.applyCue(cueVal);
         setTelemetryData((prev) => ({
           ...prev,
-          vadState: cue.cue || prev.vadState,
+          vadState: cueVal,
         }));
         break;
       }
@@ -237,10 +285,38 @@ export default function ClassroomAudioShell({
               }
             }, 20); // 20ms polling
 
+            // Phase 8: Connect HeadAudio worklet bridge (Read-Only)
+            let bridgeActive = true;
+            createHeadAudioBridge(tap.ctx, mediaStream, (msg) => {
+              const head = avatarStageRef.current?.getHead();
+              if (!head) return;
+              if (msg.isVoice && msg.weight > 0) {
+                head.setValue("viseme_" + msg.viseme, msg.weight, 40);
+                head.setValue("jawOpen", msg.weight * 0.7, 40);
+              } else {
+                head.setValue("viseme_aa", 0, 80);
+                head.setValue("viseme_E", 0, 80);
+                head.setValue("viseme_O", 0, 80);
+                head.setValue("viseme_SS", 0, 80);
+                head.setValue("jawOpen", 0, 80);
+              }
+            }).then((handle) => {
+              if (active && bridgeActive) {
+                headAudioRef.current = handle;
+              } else {
+                handle.dispose();
+              }
+            });
+
             // Store cleanup ref
             const prevDispose = tap.dispose;
             tap.dispose = () => {
+              bridgeActive = false;
               clearInterval(rmsInterval);
+              if (headAudioRef.current) {
+                headAudioRef.current.dispose();
+                headAudioRef.current = null;
+              }
               prevDispose();
             };
           }
@@ -250,6 +326,10 @@ export default function ClassroomAudioShell({
           if (track.kind === Track.Kind.Audio) {
             if (audioElementRef.current) {
               track.detach(audioElementRef.current);
+            }
+            if (headAudioRef.current) {
+              headAudioRef.current.dispose();
+              headAudioRef.current = null;
             }
             // Clean up silent tap
             if (silentTapRef.current) {
@@ -294,13 +374,18 @@ export default function ClassroomAudioShell({
       }
     };
 
+    const currentAudio = audioElementRef.current;
+
     connectToRoom();
 
     return () => {
       active = false;
-      const currentAudio = audioElementRef.current;
       if (currentAudio) {
         currentAudio.srcObject = null;
+      }
+      if (headAudioRef.current) {
+        headAudioRef.current.dispose();
+        headAudioRef.current = null;
       }
       if (silentTapRef.current) {
         silentTapRef.current.dispose();
@@ -337,6 +422,14 @@ export default function ClassroomAudioShell({
         className="sr-only"
       />
 
+      {/* Phase 8: Permanently mounted WebGL Avatar Stage (Full <-> PiP FLIP) */}
+      <AvatarStage
+        ref={avatarStageRef}
+        effectiveLayout={effectiveLayout}
+        currentCue={avatarCue}
+        isSpeaking={isSpeaking}
+      />
+
       {/* Top Header */}
       <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-zinc-200 shadow-xs z-20">
         <div className="flex items-center gap-3">
@@ -348,6 +441,12 @@ export default function ClassroomAudioShell({
             ID: {sessionId}
           </span>
         </div>
+
+        {/* Phase 8: Layout Pin/Unpin Mode Control */}
+        <LayoutPinControl
+          mode={layoutMode}
+          onChange={handleLayoutChange}
+        />
 
         {/* Connection & Audio Controls */}
         <div className="flex items-center gap-3">

@@ -1,11 +1,11 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 8 — TalkingHead 3D avatar & GPU FLIP layout engine
-- **Status:** Phase 7 PASSED (2026-11-23: verify.sh --full exit 0, 9 steps, 203 pytest green; PCM Offset Stamper core module (24 tests at build + 4 adversarial in review) computing exact playout_offset_ms from the single TTS-cursor sample counter; EpochGuard inside the stamper module (stale-turn rejection, op_id dedup, unrendered-op reconciliation for the resume_stack); client pure-TS playout clock with arm-gated RMS onset (filler never arms), pause-freeze and rewind-shift elapsed time, rAF release scheduling, late-op immediate injection; silent zero-gain Web Audio tap verified to carry no audible path; dev Telemetry HUD (?hud=1). Operator browser test: HUD renders with ?hud=1, board mounts, Circle-to-Ask Ready, one audio element, zero page errors. Incidents: the Claude builder hit its account quota near the end (code complete; operator rebuilt the wiped Postgres and re-ran the suite green at 199 before the Gemini review; Claude quota resets in ~161h, Gemini fallback per the standing rule).
-- **Last Verified Commit:** phase-7-playout branch push (base: main after PR #9 merge)
-- **Next Concrete Task:** Phase 8 TalkingHead avatar + FLIP layout (needs the avatar .glb asset decision — see blockers).
-- **Open Blockers / Manual Checks Needed:** Phase 5/6/7 live gates (voice loop, zoom sharpness, +/-150ms sync, step-1 interrupt) remain UNVERIFIED — they need Malik's laptop. Phase 8 needs a self-hosted Mixamo/ARKit .glb avatar asset (no Ready Player Me per spec). Merge policy: autonomous open+merge for ai-tutor ONLY. Review flow: fresh Antigravity reviewer per phase; zero-change reviewer runs are stalled — restart them.
+- **Active Phase:** Phase 9 — Session persistence, interactive replay & exam study exports
+- **Status:** Phase 8 PASSED (2026-11-23: verify.sh --full exit 0, 9 steps, 203 pytest green; TalkingHead v1.8.2 + Three.js 0.186.1; pure TS FLIP layout engine (apps/web/src/lib/avatar/flipLayout.ts) and Expression Mapper (apps/web/src/lib/avatar/expressionMapper.ts); HeadAudio worklet bridge reading Phase 7 silent zero-gain Web Audio tap read-only; permanent root WebGL canvas with 280ms GPU FLIP transition between FULL_AVATAR and 200x200px rounded PIP_WHITEBOARD; LayoutPinControl emitting LAYOUT_OVERRIDE; clean fallback placeholder state when .glb is absent).
+- **Last Verified Commit:** phase-8-avatar branch (@ 6a7f393)
+- **Next Concrete Task:** Phase 9 session persistence, reload recovery flow, interactive timeline replayer, and one-click study exporter.
+- **Open Blockers / Manual Checks Needed:** Phase 5/6/7/8 live hardware gates remain UNVERIFIED (voice loop, 300% zoom sharpness, ±150ms sync, step-1 interrupt, 50 rapid FLIP toggles, audio-locked lip-sync accuracy, 25-35% laptop CPU & quiet fan acoustics with real .glb asset). Model .glb asset: Malik drops the real Mixamo/ARKit file into apps/web/public/models/avatar.glb. Merge policy: autonomous open+merge for ai-tutor ONLY. Review flow: fresh Antigravity reviewer per phase; zero-change reviewer runs are stalled — restart them.
 ---
 ## Phase Index & Core TDD Checkpoints
 - [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
@@ -15,7 +15,7 @@
 - [x] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**
 - [x] **Phase 6:** Excalidraw native-SVG whiteboard, spatial allocator & circle-to-ask **[STOP-FOR-TEST-REVIEW: spatial whiteboard allocator]**
 - [x] **Phase 7:** Sample-accurate playout clock sync & barge-in rollback **[STOP-FOR-TEST-REVIEW: playout clock scheduler]**
-- [ ] **Phase 8:** TalkingHead 3D avatar (30fps) & GPU FLIP Full-to-PiP transitions
+- [x] **Phase 8:** TalkingHead 3D avatar (30fps) & GPU FLIP Full-to-PiP transitions — PASSED 2026-11-23
 - [ ] **Phase 9:** Reload persistence, interactive timeline replay & cheat-sheet exports
 - [ ] **Phase 10:** 45-minute soak test, 429 chaos drill, Supabase keep-alive & $0 deploy
 

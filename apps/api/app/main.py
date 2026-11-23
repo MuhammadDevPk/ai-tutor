@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
 
 from app.db.connection import close_db_pool, init_db_pool
-from app.routers import auth, courses
+from app.routers import auth, courses, sessions
 from app.schemas.document import (
     DocumentChunkResponse,
     DocumentUploadResponse,
@@ -26,6 +26,8 @@ from app.schemas.events import (
     PlayoutResumeEvent,
 )
 from app.schemas.session import (
+    CreateCourseSessionRequest,
+    LiveKitTokenResponse,
     SessionCreate,
     SessionEventCreate,
     SessionEventResponse,
@@ -66,6 +68,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(courses.router)
+app.include_router(sessions.router)
 
 
 def custom_openapi() -> dict[str, Any]:
@@ -94,9 +97,11 @@ def custom_openapi() -> dict[str, Any]:
         (DocumentUploadResponse, "validation"),
         (DocumentChunkResponse, "validation"),
         (SessionCreate, "validation"),
+        (CreateCourseSessionRequest, "validation"),
         (SessionResponse, "validation"),
         (SessionEventCreate, "validation"),
         (SessionEventResponse, "validation"),
+        (LiveKitTokenResponse, "validation"),
     ]
     _, defs = models_json_schema(models, ref_template="#/components/schemas/{model}")
     openapi_schema.setdefault("components", {}).setdefault("schemas", {})

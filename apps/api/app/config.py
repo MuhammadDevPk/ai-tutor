@@ -36,6 +36,9 @@ class Settings:
         os.environ.get("LLM_REQUEST_TIMEOUT_S") or "60.0"
     )
     OLLAMA_BASE_URL: str = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    LIVEKIT_URL: str = os.environ.get("LIVEKIT_URL", "")
+    LIVEKIT_API_KEY: str = os.environ.get("LIVEKIT_API_KEY", "")
+    LIVEKIT_API_SECRET: str = os.environ.get("LIVEKIT_API_SECRET", "")
 
 
 settings = Settings()

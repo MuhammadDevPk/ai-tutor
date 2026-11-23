@@ -12,6 +12,15 @@ class SessionCreate(BaseModel):
     preferences: dict[str, Any] = Field(default_factory=dict)
 
 
+class CreateCourseSessionRequest(BaseModel):
+    active_chapter_path: str | None = Field(default=None, examples=["ch01"])
+
+
+class LiveKitTokenResponse(BaseModel):
+    token: str = Field(..., description="LiveKit Room Access JWT")
+    url: str = Field(default="", description="LiveKit Server URL")
+
+
 class SessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

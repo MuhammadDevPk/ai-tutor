@@ -28,9 +28,14 @@ from app.schemas.document import (
     DocumentChunkResponse,
     DocumentUploadResponse,
 )
+from app.schemas.session import (
+    CreateCourseSessionRequest,
+    SessionResponse,
+)
 from app.schemas.syllabus import (
     SyllabusTreeResponse,
 )
+from app.tutor.service import TutorService
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -270,3 +275,26 @@ async def get_syllabus_chunks(
         limit=100,
     )
     return [DocumentChunkResponse.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/{course_id}/sessions",
+    response_model=SessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_course_session(
+    course_id: UUID,
+    data: CreateCourseSessionRequest | None = None,
+    current_user: UUID = Depends(get_current_user),
+    conn: psycopg.AsyncConnection[Any] = Depends(get_db_connection),
+) -> SessionResponse:
+    await _verify_course_owner(course_id, current_user, conn)
+    service = TutorService(pool_or_conn=conn)
+    active_chapter = data.active_chapter_path if data else None
+    session = await service.start_session(
+        course_id=course_id,
+        user_id=current_user,
+        active_chapter_path=active_chapter,
+    )
+    await conn.commit()
+    return SessionResponse.model_validate(session)

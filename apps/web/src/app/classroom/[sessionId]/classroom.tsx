@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ConnectionState,
@@ -9,7 +9,14 @@ import {
   RoomEvent,
   Track,
 } from "livekit-client";
-import type { LiveKitTokenResponse } from "@/lib/api-client";
+import type {
+  LiveKitTokenResponse,
+  BoardScheduleEvent,
+  BoardSelectionEvent,
+} from "@/lib/api-client";
+import BoardWorkspace, {
+  type BoardOpWithPlacement,
+} from "@/components/classroom/BoardWorkspace";
 
 export default function ClassroomAudioShell({
   sessionId,
@@ -23,12 +30,30 @@ export default function ClassroomAudioShell({
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Board operations received over LiveKit DataChannel
+  const [boardOperations, setBoardOperations] = useState<BoardOpWithPlacement[]>([]);
+
   // HARD INVARIANT: Standard HTML audio element only.
   // Never pass this element into Web Audio API AudioContext / createMediaElementSource.
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const roomRef = useRef<Room | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  // Circle-to-Ask: publish BOARD_SELECTION event over DataChannel
+  const handleBoardSelection = useCallback(async (event: BoardSelectionEvent) => {
+    const room = roomRef.current;
+    if (!room || room.state !== ConnectionState.Connected) return;
+
+    try {
+      const payloadBytes = new TextEncoder().encode(JSON.stringify(event));
+      await room.localParticipant.publishData(payloadBytes, {
+        reliable: true,
+      });
+    } catch (err) {
+      console.warn("Failed to publish BOARD_SELECTION over DataChannel:", err);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +112,27 @@ export default function ClassroomAudioShell({
           }
         });
 
+        // Listen for Server-to-Client DataChannel events (BOARD_SCHEDULE, etc.)
+        room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
+          if (!active) return;
+          try {
+            const rawText = new TextDecoder().decode(payload);
+            const parsed = JSON.parse(rawText);
+
+            if (parsed.event_type === "BOARD_SCHEDULE") {
+              const scheduleEvent = parsed as BoardScheduleEvent;
+              if (scheduleEvent.operations && scheduleEvent.operations.length > 0) {
+                setBoardOperations((prev) => [
+                  ...prev,
+                  ...(scheduleEvent.operations as BoardOpWithPlacement[]),
+                ]);
+              }
+            }
+          } catch {
+            // Ignore non-JSON DataChannel packets defensively
+          }
+        });
+
         // Connect to room
         await room.connect(serverUrl, data.token);
 
@@ -114,8 +160,9 @@ export default function ClassroomAudioShell({
 
     return () => {
       active = false;
-      if (audioElementRef.current) {
-        audioElementRef.current.srcObject = null;
+      const currentAudio = audioElementRef.current;
+      if (currentAudio) {
+        currentAudio.srcObject = null;
       }
       room.disconnect();
       roomRef.current = null;
@@ -149,16 +196,18 @@ export default function ClassroomAudioShell({
       />
 
       {/* Top Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-zinc-200 shadow-xs">
+      <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-zinc-200 shadow-xs z-20">
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
             Classroom
           </span>
-          <h1 className="text-lg font-bold text-zinc-900">Live AI Tutor Session</h1>
-          <span className="text-xs text-zinc-400 font-mono">ID: {sessionId}</span>
+          <h1 className="text-base font-bold text-zinc-900">Live AI Tutor Session</h1>
+          <span className="text-xs text-zinc-400 font-mono hidden md:inline">
+            ID: {sessionId}
+          </span>
         </div>
 
-        {/* Connection State Badge */}
+        {/* Connection & Audio Controls */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-xs font-medium">
             <span
@@ -170,7 +219,7 @@ export default function ClassroomAudioShell({
                   : "bg-zinc-400"
               }`}
             />
-            <span className="capitalize">{connectionState}</span>
+            <span className="capitalize hidden sm:inline">{connectionState}</span>
           </div>
 
           <button
@@ -193,48 +242,89 @@ export default function ClassroomAudioShell({
         </div>
       </header>
 
-      {/* Main Classroom Workspace */}
-      <main className="flex flex-1 flex-col items-center justify-center p-8">
-        {error ? (
-          <div className="max-w-md w-full p-6 bg-red-50 border border-red-200 rounded-lg text-center space-y-3">
-            <h2 className="text-sm font-bold text-red-800">Connection Error</h2>
-            <p className="text-xs text-red-600 leading-relaxed">{error}</p>
+      {/* Main Classroom Grid */}
+      <main className="flex flex-1 flex-col p-4 gap-4 overflow-hidden">
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between text-xs text-red-700">
+            <span>{error}</span>
             <button
-              onClick={() => router.push("/")}
-              className="mt-2 px-4 py-2 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-md"
+              onClick={() => setError(null)}
+              className="text-red-500 hover:text-red-800 font-bold ml-4"
             >
-              Return Home
+              x
             </button>
           </div>
-        ) : (
-          <div className="max-w-md w-full bg-white p-6 rounded-xl border border-zinc-200 shadow-xs text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <svg
-                className="w-8 h-8 animate-pulse"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"
-                />
-              </svg>
+        )}
+
+        <div className="flex flex-1 flex-col lg:flex-row gap-4 h-[calc(100vh-100px)]">
+          {/* Main Excalidraw Whiteboard Workspace */}
+          <div className="flex-1 flex flex-col min-h-[500px]">
+            <BoardWorkspace
+              operations={boardOperations}
+              onBoardSelection={handleBoardSelection}
+              className="h-full"
+            />
+          </div>
+
+          {/* Teacher Status & Telemetry Card */}
+          <div className="w-full lg:w-72 flex flex-col gap-3">
+            <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-xs space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                  <svg
+                    className={`w-5 h-5 ${
+                      connectionState === ConnectionState.Connected
+                        ? "animate-pulse"
+                        : ""
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900">AI Teacher</h3>
+                  <p className="text-xs text-zinc-500">
+                    {connectionState === ConnectionState.Connected
+                      ? "Voice Connected"
+                      : "Connecting..."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-xs text-zinc-600 space-y-1.5 pt-2 border-t border-zinc-100">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Microphone:</span>
+                  <span className="font-medium">{isMuted ? "Muted" : "Active"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Whiteboard Ops:</span>
+                  <span className="font-mono font-medium">{boardOperations.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Circle-to-Ask:</span>
+                  <span className="text-emerald-600 font-medium">Ready</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-zinc-900">
-                {connectionState === ConnectionState.Connected
-                  ? "Tutor Voice Connected"
-                  : "Connecting to Tutor Room..."}
-              </h2>
-              <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                Full-duplex voice stream active. Speak naturally or interrupt anytime over your laptop speakers.
-              </p>
+
+            <div className="bg-white p-3.5 rounded-xl border border-zinc-200 shadow-xs text-xs text-zinc-500 space-y-1.5">
+              <span className="font-semibold text-zinc-700 block">Classroom Tips:</span>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-zinc-500">
+                <li>Speak naturally to interrupt or ask questions anytime.</li>
+                <li>Draw a circle or arrow around any equation step to reference it.</li>
+                <li>Use the slide strip at bottom to review past derivations.</li>
+              </ul>
             </div>
           </div>
-        )}
+        </div>
       </main>
     </div>
   );

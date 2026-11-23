@@ -74,6 +74,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Course Session */
+        post: operations["create_course_session_courses__course_id__sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/syllabus": {
         parameters: {
             query?: never;
@@ -119,6 +136,26 @@ export interface paths {
         get: operations["health_health_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/livekit-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Livekit Token
+         * @description Mint a LiveKit room token bound to a verified tutor session.
+         */
+        post: operations["get_livekit_token_sessions__session_id__livekit_token_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -304,6 +341,15 @@ export interface components {
              */
             user_id: string;
         };
+        /** CreateCourseSessionRequest */
+        CreateCourseSessionRequest: {
+            /**
+             * Active Chapter Path
+             * @default null
+             * @example ch01
+             */
+            active_chapter_path: string | null;
+        };
         /** DocumentChunkResponse */
         DocumentChunkResponse: {
             /**
@@ -381,6 +427,20 @@ export interface components {
              * @enum {string}
              */
             mode: "FULL_AVATAR" | "PIP_WHITEBOARD" | "AUTO";
+        };
+        /** LiveKitTokenResponse */
+        LiveKitTokenResponse: {
+            /**
+             * Token
+             * @description LiveKit Room Access JWT
+             */
+            token: string;
+            /**
+             * Url
+             * @description LiveKit Server URL
+             * @default
+             */
+            url: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -902,6 +962,41 @@ export interface operations {
             };
         };
     };
+    create_course_session_courses__course_id__sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateCourseSessionRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_course_syllabus_courses__course_id__syllabus_get: {
         parameters: {
             query?: never;
@@ -985,6 +1080,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    get_livekit_token_sessions__session_id__livekit_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveKitTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

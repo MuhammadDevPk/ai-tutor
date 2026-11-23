@@ -1,19 +1,18 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 5 — LiveKit voice transport, server Kokoro TTS & two-stage barge-in
-- **Status:** Phase 4 PASSED (2026-11-23: verify.sh --full exit 0, 9 steps, 54 pytest green incl. the full-chapter simulation gate; reviewed under the NEW flow — a fresh Opus reviewer agent found and fixed issues (missing semantic board-summary helper, transaction commit gaps in service/simulate/tests, deferral wording), then its own verify passed; operator re-ran verify.sh --full independently: exit 0, 54 passed. The reviewer's itemized findings report was cut off by the Antigravity quota limit (429, resets ~19:50 PKT 2026-11-23); fixes are in the tree and verified, the severity list itself was not recovered.
-- **Last Verified Commit:** phase-4-fsm branch push (base: main after PR #3 merge)
-- **Next Concrete Task:** Phase 5 LiveKit voice transport + Kokoro TTS + two-stage barge-in (STOP-FOR-TEST-REVIEW: Whisper backchannel guard). Needs the LiveKit Cloud account from Malik's provisioning list; Antigravity quota resets ~19:50 PKT 2026-11-23.
-- **Open Blockers / Manual Checks Needed:** Live provider streaming still unverified end to end (keys in the operator vault, not the app env; both keys proven with live non-streaming calls in Phase 2). gemini-3.8-flash 503s observed 2026-11-23; the router treats Gemini 503 as failover-eligible. Merge policy RESOLVED 2026-11-23: autonomous open+merge for ai-tutor ONLY. Review flow CHANGED 2026-11-23 (tutor only): fresh Antigravity reviewer agent per phase, Jewel browser-tests + checks executed evidence, no line-by-line review by Jewel.
-
+- **Active Phase:** Phase 6 — Excalidraw whiteboard, spatial allocator & circle-to-ask
+- **Status:** Phase 5 PASSED (2026-11-23: verify.sh --full exit 0, 9 steps, 154 pytest green; LiveKit token endpoint + session create endpoint live-checked by the operator (JWT room = session id, 15-min expiry, identity = user id); classroom shell browser-tested in headless Chromium (page renders, exactly one HTML audio element, mute/end controls present; the LiveKit signal connection itself cannot complete from this VM — no WebRTC media path — so the live voice gates remain Malik's-laptop tests). Built on Gemini 3.8 Flash (Claude quota exhausted until ~19:50 PKT 2026-11-23) and reviewed under the new flow by a fresh Gemini reviewer, which fixed issues in session_agent/barge_in/guard/stt/worker/classroom (including sr-only instead of hidden for the audio element and srcObject unmount cleanup) and added SessionAgent integration tests (146 -> 154 pytest); operator re-ran verify.sh --full independently: exit 0. Retro-reviews of Phases 1-3 also PASSED and merged (PRs #5, #6, #7).
+- **Last Verified Commit:** phase-5-voice branch push (base: main after PR #4 merge)
+- **Next Concrete Task:** Phase 6 Excalidraw whiteboard + spatial allocator (STOP-FOR-TEST-REVIEW core module) + circle-to-ask.
+- **Open Blockers / Manual Checks Needed:** Live hardware gates for Phase 5 (10-minute speaker session with zero echo loops, backchannel duck/resume with real voice, sub-200ms halt, 1.4-2.0s answer latency) are UNVERIFIED — they need Malik's laptop with mic/speakers. Live provider streaming still unverified end to end. Merge policy RESOLVED 2026-11-23: autonomous open+merge for ai-tutor ONLY. Review flow CHANGED 2026-11-23 (tutor only): fresh Antigravity reviewer agent per phase, Jewel browser-tests + checks executed evidence, no line-by-line review by Jewel.
 ---
 ## Phase Index & Core TDD Checkpoints
 - [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
 - [x] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector — PASSED 2026-11-23
 - [x] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]** — PASSED 2026-11-23
 - [x] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler — PASSED 2026-11-23
-- [ ] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**
+- [x] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**
 - [ ] **Phase 6:** Excalidraw native-SVG whiteboard, spatial allocator & circle-to-ask **[STOP-FOR-TEST-REVIEW: spatial whiteboard allocator]**
 - [ ] **Phase 7:** Sample-accurate playout clock sync & barge-in rollback **[STOP-FOR-TEST-REVIEW: playout clock scheduler]**
 - [ ] **Phase 8:** TalkingHead 3D avatar (30fps) & GPU FLIP Full-to-PiP transitions

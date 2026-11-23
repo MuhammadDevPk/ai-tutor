@@ -286,6 +286,27 @@
         "title": "CourseResponse",
         "type": "object"
       },
+      "CreateCourseSessionRequest": {
+        "properties": {
+          "active_chapter_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "examples": [
+              "ch01"
+            ],
+            "title": "Active Chapter Path"
+          }
+        },
+        "title": "CreateCourseSessionRequest",
+        "type": "object"
+      },
       "DocumentChunkResponse": {
         "properties": {
           "course_id": {
@@ -443,6 +464,26 @@
           "mode"
         ],
         "title": "LayoutOverrideEvent",
+        "type": "object"
+      },
+      "LiveKitTokenResponse": {
+        "properties": {
+          "token": {
+            "description": "LiveKit Room Access JWT",
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "description": "LiveKit Server URL",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "LiveKitTokenResponse",
         "type": "object"
       },
       "LoginRequest": {
@@ -1324,6 +1365,71 @@
         ]
       }
     },
+    "/courses/{course_id}/sessions": {
+      "post": {
+        "operationId": "create_course_session_courses__course_id__sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateCourseSessionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Course Session",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
     "/courses/{course_id}/syllabus": {
       "get": {
         "operationId": "get_course_syllabus_courses__course_id__syllabus_get",
@@ -1455,6 +1561,55 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/sessions/{session_id}/livekit-token": {
+      "post": {
+        "description": "Mint a LiveKit room token bound to a verified tutor session.",
+        "operationId": "get_livekit_token_sessions__session_id__livekit_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveKitTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Livekit Token",
+        "tags": [
+          "sessions"
+        ]
       }
     }
   }

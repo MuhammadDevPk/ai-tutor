@@ -1,0 +1,8 @@
+{
+  "name": "ai-video-tutor",
+  "private": true,
+  "packageManager": "pnpm@12.21.0",
+  "scripts": {
+    "sync:contracts": "(cd apps/api && uv run python scripts/export_openapi.py) && (cd apps/web && pnpm exec openapi-typescript ../api/generated/openapi.json -o src/lib/api-client/schema.ts)"
+  }
+}

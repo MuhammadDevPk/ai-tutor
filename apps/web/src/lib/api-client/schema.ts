@@ -57,6 +57,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Document */
+        post: operations["upload_document_courses__course_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/syllabus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Course Syllabus */
+        get: operations["get_course_syllabus_courses__course_id__syllabus_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/syllabus/chunks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Syllabus Chunks */
+        get: operations["get_syllabus_chunks_courses__course_id__syllabus_chunks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -181,6 +232,11 @@ export interface components {
              */
             referenced_op_id: string;
         };
+        /** Body_upload_document_courses__course_id__documents_post */
+        Body_upload_document_courses__course_id__documents_post: {
+            /** File */
+            file: string;
+        };
         /** CourseCreate */
         CourseCreate: {
             /**
@@ -247,6 +303,54 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /** DocumentChunkResponse */
+        DocumentChunkResponse: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Markdown */
+            markdown: string;
+            /**
+             * Page
+             * @default null
+             */
+            page: number | null;
+            /** Raw Latex */
+            raw_latex?: string[];
+            /**
+             * Source Filename
+             * @default null
+             */
+            source_filename: string | null;
+            /** Syllabus Path */
+            syllabus_path: string;
+        };
+        /** DocumentUploadResponse */
+        DocumentUploadResponse: {
+            /** Chunks */
+            chunks: number;
+            /** Pages */
+            pages: number;
+            /**
+             * Tree Nodes
+             * @default 0
+             */
+            tree_nodes: number;
+            /** Vision Flagged Pages */
+            vision_flagged_pages: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -442,6 +546,11 @@ export interface components {
             /** Key Formulas */
             key_formulas?: string[];
             /**
+             * Level
+             * @default 1
+             */
+            level: number;
+            /**
              * Mastery Status
              * @default not_started
              * @example not_started
@@ -460,6 +569,16 @@ export interface components {
             objectives?: string[];
             /** Order Index */
             order_index: number;
+            /**
+             * Page End
+             * @default null
+             */
+            page_end: number | null;
+            /**
+             * Page Start
+             * @default null
+             */
+            page_start: number | null;
             /**
              * Path
              * @example ch01
@@ -478,6 +597,8 @@ export interface components {
         };
         /** SyllabusNodeResponse */
         SyllabusNodeResponse: {
+            /** Children */
+            children?: components["schemas"]["SyllabusNodeResponse"][];
             /**
              * Course Id
              * Format: uuid
@@ -485,9 +606,9 @@ export interface components {
             course_id: string;
             /**
              * Created At
-             * Format: date-time
+             * @default null
              */
-            created_at: string;
+            created_at: string | null;
             /**
              * Id
              * Format: uuid
@@ -495,6 +616,11 @@ export interface components {
             id: string;
             /** Key Formulas */
             key_formulas?: string[];
+            /**
+             * Level
+             * @default 1
+             */
+            level: number;
             /**
              * Mastery Status
              * @default not_started
@@ -515,6 +641,16 @@ export interface components {
             /** Order Index */
             order_index: number;
             /**
+             * Page End
+             * @default null
+             */
+            page_end: number | null;
+            /**
+             * Page Start
+             * @default null
+             */
+            page_start: number | null;
+            /**
              * Path
              * @example ch01
              * @example ch01.t01
@@ -531,9 +667,9 @@ export interface components {
             title: string;
             /**
              * Updated At
-             * Format: date-time
+             * @default null
              */
-            updated_at: string;
+            updated_at: string | null;
         };
         /** SyllabusTreeResponse */
         SyllabusTreeResponse: {
@@ -714,6 +850,106 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_document_courses__course_id__documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_document_courses__course_id__documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_course_syllabus_courses__course_id__syllabus_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyllabusTreeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_syllabus_chunks_courses__course_id__syllabus_chunks_get: {
+        parameters: {
+            query: {
+                /** @description PostgreSQL ltree path scope */
+                path: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentChunkResponse"][];
                 };
             };
             /** @description Validation Error */

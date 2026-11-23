@@ -108,6 +108,11 @@ if [ -f "apps/web/package.json" ]; then
   if [ "$MODE" = "--full" ] && grep -q '"test"' apps/web/package.json; then
     run_step "Web tests" bash -c "cd apps/web && pnpm test -- --run"
   fi
+  if [ "$MODE" = "--full" ]; then
+    # Added by the operator after Phase 2: tsc + lint passed while
+    # `next build` failed on a prerender error, so the full gate now builds.
+    run_step "Web production build" bash -c "cd apps/web && pnpm build"
+  fi
 fi
 
 # 4. Full-Mode Phase Sign-Off Gates (Contract Drift + No Leftover Spikes)

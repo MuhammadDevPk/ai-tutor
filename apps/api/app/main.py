@@ -3,12 +3,17 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
 
 from app.db.connection import close_db_pool, init_db_pool
 from app.routers import auth, courses
+from app.schemas.document import (
+    DocumentChunkResponse,
+    DocumentUploadResponse,
+)
 from app.schemas.events import (
     AudioSegmentStartEvent,
     AvatarCueEvent,
@@ -46,6 +51,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The web app is served from a different origin (Next.js dev server), so the
+# browser blocks every API call without CORS. Allow the local dev origins.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth.router)
 app.include_router(courses.router)
 
@@ -73,6 +91,8 @@ def custom_openapi() -> dict[str, Any]:
         (SyllabusNodeCreate, "validation"),
         (SyllabusNodeResponse, "validation"),
         (SyllabusTreeResponse, "validation"),
+        (DocumentUploadResponse, "validation"),
+        (DocumentChunkResponse, "validation"),
         (SessionCreate, "validation"),
         (SessionResponse, "validation"),
         (SessionEventCreate, "validation"),

@@ -2,17 +2,52 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 
 from app.auth import get_current_user
 from app.db.connection import get_db_connection
+from app.db.ltree_repository import ScopedLtreeRepository, sanitize_ltree_path
+from app.ingestion.embeddings import BaseEmbedder, FastEmbedder
+from app.ingestion.gemini_client import GeminiClient, get_gemini_client
+from app.ingestion.service import IngestionService
+from app.ingestion.tree_extractor import assemble_tree
 from app.schemas.course import (
     CourseCreate,
     CourseListResponse,
     CourseResponse,
 )
+from app.schemas.document import (
+    DocumentChunkResponse,
+    DocumentUploadResponse,
+)
+from app.schemas.syllabus import (
+    SyllabusTreeResponse,
+)
 
 router = APIRouter(prefix="/courses", tags=["courses"])
+
+
+async def _verify_course_owner(
+    course_id: UUID,
+    user_id: UUID,
+    conn: psycopg.AsyncConnection[Any],
+) -> None:
+    query = "SELECT id FROM courses WHERE id = %s AND user_id = %s;"
+    async with conn.cursor() as cur:
+        await cur.execute(query, (str(course_id), str(user_id)))
+        row = await cur.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
 
 
 @router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
@@ -104,3 +139,127 @@ async def delete_course(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
             )
         return {"status": "deleted", "id": str(course_id)}
+
+
+def get_embedder() -> BaseEmbedder:
+    return FastEmbedder()
+
+
+@router.post(
+    "/{course_id}/documents",
+    response_model=DocumentUploadResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def upload_document(
+    course_id: UUID,
+    file: UploadFile = File(...),
+    current_user: UUID = Depends(get_current_user),
+    conn: psycopg.AsyncConnection[Any] = Depends(get_db_connection),
+    gemini_client: GeminiClient | None = Depends(get_gemini_client),
+    embedder: BaseEmbedder = Depends(get_embedder),
+) -> DocumentUploadResponse:
+    await _verify_course_owner(course_id, current_user, conn)
+
+    # Enforce PDF only
+    filename = file.filename or ""
+    content_type = file.content_type or ""
+    if not (filename.lower().endswith(".pdf") or content_type == "application/pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF files are supported",
+        )
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    use_tree_extraction = gemini_client is not None
+    service = IngestionService(
+        pool_or_conn=conn,
+        embedder=embedder,
+        gemini_client=gemini_client,
+    )
+    result = await service.ingest_document(
+        course_id=course_id,
+        document_bytes=file_bytes,
+        filename=filename or "document.pdf",
+        use_tree_extraction=use_tree_extraction,
+    )
+
+    tree_count = result.tree_nodes
+    if tree_count == 0:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) as cnt FROM syllabus_nodes WHERE course_id = %s;",
+                (str(course_id),),
+            )
+            count_row = await cur.fetchone()
+            if count_row:
+                tree_count = count_row["cnt"]
+
+    return DocumentUploadResponse(
+        pages=result.pages,
+        chunks=result.chunks,
+        vision_flagged_pages=result.vision_flagged_pages,
+        tree_nodes=tree_count,
+    )
+
+
+@router.get(
+    "/{course_id}/syllabus",
+    response_model=SyllabusTreeResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_course_syllabus(
+    course_id: UUID,
+    current_user: UUID = Depends(get_current_user),
+    conn: psycopg.AsyncConnection[Any] = Depends(get_db_connection),
+) -> SyllabusTreeResponse:
+    await _verify_course_owner(course_id, current_user, conn)
+
+    query = """
+        SELECT id, course_id, path, node_type, order_index, title, level,
+               page_start, page_end, objectives, key_formulas, summary,
+               mastery_status, created_at, updated_at
+        FROM syllabus_nodes
+        WHERE course_id = %s
+        ORDER BY path ASC, order_index ASC;
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(query, (str(course_id),))
+        rows = await cur.fetchall()
+
+    roots = assemble_tree(rows)
+    return SyllabusTreeResponse(course_id=course_id, nodes=roots)
+
+
+@router.get(
+    "/{course_id}/syllabus/chunks",
+    response_model=list[DocumentChunkResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def get_syllabus_chunks(
+    course_id: UUID,
+    path: str = Query(..., description="PostgreSQL ltree path scope"),
+    current_user: UUID = Depends(get_current_user),
+    conn: psycopg.AsyncConnection[Any] = Depends(get_db_connection),
+) -> list[DocumentChunkResponse]:
+    await _verify_course_owner(course_id, current_user, conn)
+
+    try:
+        valid_path = sanitize_ltree_path(path)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Invalid ltree path: {e}",
+        ) from e
+
+    repo = ScopedLtreeRepository(conn)
+    rows = await repo.query_document_chunks(
+        course_id=course_id,
+        scope_path=valid_path,
+    )
+    return [DocumentChunkResponse.model_validate(r) for r in rows]

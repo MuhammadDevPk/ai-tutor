@@ -661,6 +661,11 @@
             "title": "Current Node Path",
             "type": "string"
           },
+          "fsm_data": {
+            "additionalProperties": true,
+            "title": "Fsm Data",
+            "type": "object"
+          },
           "fsm_state": {
             "default": "ONBOARDING",
             "title": "Fsm State",

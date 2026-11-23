@@ -36,3 +36,5 @@ export type DocumentChunk = Schemas["DocumentChunkResponse"];
 export type DocumentUpload = Schemas["DocumentUploadResponse"];
 export type Session = Schemas["SessionResponse"];
 export type SessionEvent = Schemas["SessionEventResponse"];
+export type LiveKitTokenResponse = Schemas["LiveKitTokenResponse"];
+export type CreateCourseSessionRequest = Schemas["CreateCourseSessionRequest"];

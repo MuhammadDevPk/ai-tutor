@@ -1,17 +1,17 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 3 — Model-bucket LLM router & line-delimited stream parser
-- **Status:** Phase 2 PASSED (operator-verified 2026-11-23: verify.sh --full exit 0 with 9 steps incl. the new web production build, 24 pytest tests green, migrations 002+003 live; both API keys proven with live calls — Gemini list-models + generate, Groq list-models + chat; Syllabus Inspector browser-tested end to end on the production build: dev sign-in, tree render, scoped chunk load, zero page errors)
-- **Last Verified Commit:** phase-2-ingestion branch push (base: phase-1-scaffold)
-- **Next Concrete Task:** Phase 3 router + line-stream parser (core module, STOP-FOR-TEST-REVIEW: tests first, fail-first). Live gates use the vault-connected Groq + Gemini keys via the operator's connector helpers; the app reads keys from env settings.
-- **Open Blockers / Manual Checks Needed:** gemini-3.8-flash returned HTTP 503 twice on 2026-11-23 while gemini-2.5-flash worked (model-side availability, key is valid); the Phase 3 router waterfall must tolerate a 503 on the primary Gemini model. Merge policy: Malik proposed autonomous open+merge on 2026-11-23; scope (tutor only vs all repos) asked, awaiting his answer — until then nothing merges.
+- **Active Phase:** Phase 4 — Explicit 5-state Pedagogical FSM & 4,000-token budget assembler
+- **Status:** Phase 3 PASSED (operator-verified 2026-11-23: verify.sh --full exit 0, 9 steps, 43 pytest green; parser built tests-first with a recorded 12-test fail-first run; operator fail-without-change audit passed — splitting on the last colon instead of the first fails 3 parser tests incl. the math-colons case; router failover semantics reviewed line by line)
+- **Last Verified Commit:** phase-3-router branch push (base: main after PR #2 merge)
+- **Next Concrete Task:** Phase 4 FSM (ONBOARDING, TEACH_STEP, MICRO_CHECK, INTERRUPT_QA, RECAP) wiring the Phase 3 router + parser to the Phase 2 scoped RAG, with the 4,000-token per-turn budget assembler.
+- **Open Blockers / Manual Checks Needed:** Live provider streaming is still unverified end to end (keys live in the operator vault, not the app env; both keys were proven with live non-streaming calls in Phase 2). gemini-3.8-flash 503s observed 2026-11-23; the router treats Gemini 503 as failover-eligible. Merge policy RESOLVED 2026-11-23: autonomous open+merge for ai-tutor ONLY.
 
 ---
 ## Phase Index & Core TDD Checkpoints
 - [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
 - [x] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector — PASSED 2026-11-23
-- [ ] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]**
+- [x] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]** — PASSED 2026-11-23
 - [ ] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler
 - [ ] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**
 - [ ] **Phase 6:** Excalidraw native-SVG whiteboard, spatial allocator & circle-to-ask **[STOP-FOR-TEST-REVIEW: spatial whiteboard allocator]**

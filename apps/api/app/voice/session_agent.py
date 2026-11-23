@@ -26,7 +26,6 @@ from app.llm.stream_parser import (
     SayEvent,
 )
 from app.schemas.events import (
-    AudioSegmentStartEvent,
     BoardOp,
     BoardScheduleEvent,
     DataChannelEvent,
@@ -34,6 +33,7 @@ from app.schemas.events import (
 from app.tutor.fsm import StateEvent
 from app.tutor.service import TutorService
 from app.voice.barge_in import BargeInController
+from app.voice.offset_stamper import EpochGuard, OffsetStamper
 from app.voice.stt import STTClient
 from app.voice.tts import (
     BYTES_PER_SAMPLE,
@@ -77,6 +77,10 @@ class SessionAgent:
         self._playout_paused: bool = False
         self._current_task: asyncio.Task[None] | None = None
         self._op_counter: int = 0
+
+        # Phase 7: PCM Offset Stamper & Epoch Guard (reusing self.tts.cursor)
+        self.stamper = OffsetStamper(cursor=self.tts.cursor)
+        self.epoch_guard = EpochGuard()
 
         # Barge-in controller configured with hooks
         self.barge_in = BargeInController(
@@ -176,9 +180,13 @@ class SessionAgent:
         self._playout_paused = False
         turn_id = self.barge_in.active_turn_id
 
+        # Phase 7: reset stamper and epoch guard for this turn
+        self.stamper.reset(turn_id)
+        self.epoch_guard.advance_turn(turn_id)
+
         # Mandatory lead-in silence: 150ms
         self.barge_in.start_turn(turn_id)
-        self.tts.cursor.total_samples += LEAD_IN_SILENCE_SAMPLES
+        self.stamper.advance_samples(LEAD_IN_SILENCE_SAMPLES)
         lead_in_pcm = b"\x00" * LEAD_IN_SILENCE_BYTES
         await self.pump_audio_pcm(lead_in_pcm)
 
@@ -196,6 +204,9 @@ class SessionAgent:
                 if not self.is_playing:
                     break
 
+                # Note: synthesize_sentence advances self.tts.cursor.total_samples,
+                # which the stamper reuses as its single source of truth.
+
                 if first_say:
                     first_say = False
                     if (
@@ -204,20 +215,17 @@ class SessionAgent:
                     ):
                         # Synthesis exceeded 1,100ms: emit filler segment first
                         await self.emit_datachannel_event(
-                            AudioSegmentStartEvent(
-                                turn_id=turn_id, segment_id="filler"
-                            )
+                            self.stamper.emit_segment_start("filler")
                         )
                         filler_pcm = self.filler_cache.get("filler_0", b"")
                         if filler_pcm:
-                            self.tts.cursor.total_samples += (
-                                len(filler_pcm) // BYTES_PER_SAMPLE
-                            )
+                            filler_samples = len(filler_pcm) // BYTES_PER_SAMPLE
+                            self.stamper.advance_samples(filler_samples)
                             await self.pump_audio_pcm(filler_pcm)
 
                     # Emit response segment
                     await self.emit_datachannel_event(
-                        AudioSegmentStartEvent(turn_id=turn_id, segment_id="response")
+                        self.stamper.emit_segment_start("response")
                     )
 
                 await self.pump_audio_pcm(pcm_bytes)
@@ -228,37 +236,23 @@ class SessionAgent:
                 if first_say:
                     first_say = False
                     await self.emit_datachannel_event(
-                        AudioSegmentStartEvent(turn_id=turn_id, segment_id="response")
+                        self.stamper.emit_segment_start("response")
                     )
 
-                self._op_counter += 1
-                op_type = (
-                    "latex"
-                    if isinstance(ev, LatexEvent)
-                    else "plot"
-                    if isinstance(ev, PlotEvent)
-                    else "diagram"
-                    if isinstance(ev, DiagramEvent)
-                    else "clear"
-                )
-                payload: dict[str, Any] = {}
-                if isinstance(ev, LatexEvent):
-                    payload = {"latex": ev.latex}
-                elif isinstance(ev, PlotEvent):
-                    payload = {"spec": ev.spec}
-                elif isinstance(ev, DiagramEvent):
-                    payload = {"spec": ev.spec}
-                elif isinstance(ev, ClearEvent):
-                    payload = {}
+                # Phase 7: use the OffsetStamper for exact playout_offset_ms
+                stamp_result = self.stamper.stamp(ev)
 
                 board_op = BoardOp(
-                    op_id=f"op_{self._op_counter}",
-                    op_type=op_type,
-                    playout_offset_ms=self.tts.cursor.played_ms,
-                    payload=payload,
+                    op_id=stamp_result.op_id,
+                    op_type=stamp_result.op_type,
+                    playout_offset_ms=stamp_result.playout_offset_ms,
+                    payload=stamp_result.payload,
                 )
                 board_ops.append(board_op)
                 self.barge_in.unrendered_board_ops.append(board_op)
+
+                # Register with epoch guard
+                self.epoch_guard.accept(turn_id=turn_id, op=board_op)
 
                 # Emit BOARD_SCHEDULE immediately
                 await self.emit_datachannel_event(
@@ -274,7 +268,7 @@ class SessionAgent:
 
         if first_say and self.is_playing:
             await self.emit_datachannel_event(
-                AudioSegmentStartEvent(turn_id=turn_id, segment_id="response")
+                self.stamper.emit_segment_start("response")
             )
 
         self.is_playing = False

@@ -13,10 +13,18 @@ import type {
   LiveKitTokenResponse,
   BoardScheduleEvent,
   BoardSelectionEvent,
+  AudioSegmentStartEvent,
+  PlayoutResumeEvent,
+  InterruptFlushEvent,
 } from "@/lib/api-client";
 import BoardWorkspace, {
   type BoardOpWithPlacement,
 } from "@/components/classroom/BoardWorkspace";
+import TelemetryHud, {
+  type TelemetryData,
+} from "@/components/classroom/TelemetryHud";
+import { PlayoutClock } from "@/lib/board/playoutClock";
+import { createSilentTap, type SilentTapHandle } from "@/lib/audio/silentTap";
 
 export default function ClassroomAudioShell({
   sessionId,
@@ -33,12 +41,56 @@ export default function ClassroomAudioShell({
   // Board operations received over LiveKit DataChannel
   const [boardOperations, setBoardOperations] = useState<BoardOpWithPlacement[]>([]);
 
+  // Telemetry HUD data
+  const [telemetryData, setTelemetryData] = useState<TelemetryData>({
+    turnId: 0,
+    elapsedMs: 0,
+    vadState: "idle",
+    activeLlmBucket: "n/a",
+    groqTpmRemaining: null,
+    latencies: {},
+  });
+
   // HARD INVARIANT: Standard HTML audio element only.
   // Never pass this element into Web Audio API AudioContext / createMediaElementSource.
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const roomRef = useRef<Room | null>(null);
+  const silentTapRef = useRef<SilentTapHandle | null>(null);
+  const playoutClockRef = useRef<PlayoutClock | null>(null);
+  const rafIdRef = useRef<number | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  // Initialize playout clock
+  useEffect(() => {
+    const clock = new PlayoutClock({
+      clock: () => performance.now(),
+      onRelease: (op) => {
+        // Released ops go to BoardWorkspace injector
+        setBoardOperations((prev) => [...prev, op as BoardOpWithPlacement]);
+      },
+    });
+    playoutClockRef.current = clock;
+
+    // requestAnimationFrame tick loop
+    const tick = () => {
+      clock.tick();
+      setTelemetryData((prev) => ({
+        ...prev,
+        turnId: clock.activeTurnId,
+        elapsedMs: clock.elapsedMs,
+      }));
+      rafIdRef.current = requestAnimationFrame(tick);
+    };
+    rafIdRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      clock.reset();
+    };
+  }, []);
 
   // Circle-to-Ask: publish BOARD_SELECTION event over DataChannel
   const handleBoardSelection = useCallback(async (event: BoardSelectionEvent) => {
@@ -52,6 +104,72 @@ export default function ClassroomAudioShell({
       });
     } catch (err) {
       console.warn("Failed to publish BOARD_SELECTION over DataChannel:", err);
+    }
+  }, []);
+
+  // Handle DataChannel events with playout clock integration
+  const handleDataChannelEvent = useCallback((parsed: Record<string, unknown>) => {
+    const clock = playoutClockRef.current;
+    if (!clock) return;
+
+    switch (parsed.event_type) {
+      case "BOARD_SCHEDULE": {
+        const scheduleEvent = parsed as unknown as BoardScheduleEvent;
+        if (scheduleEvent.operations && scheduleEvent.operations.length > 0) {
+          for (const op of scheduleEvent.operations) {
+            clock.enqueue(scheduleEvent.turn_id, op);
+          }
+        }
+        break;
+      }
+      case "AUDIO_SEGMENT_START": {
+        const segEvent = parsed as unknown as AudioSegmentStartEvent;
+        clock.onSegmentStart(
+          segEvent.turn_id,
+          segEvent.segment_id as "filler" | "response"
+        );
+        break;
+      }
+      case "PLAYOUT_PAUSE": {
+        clock.onPlayoutPause();
+        break;
+      }
+      case "PLAYOUT_RESUME": {
+        const resumeEvent = parsed as unknown as PlayoutResumeEvent;
+        clock.onPlayoutResume(resumeEvent.rewind_ms);
+        break;
+      }
+      case "INTERRUPT_FLUSH": {
+        const flushEvent = parsed as unknown as InterruptFlushEvent;
+        const lastRenderedOpId = clock.onInterruptFlush(flushEvent.new_turn_id);
+        // Report last rendered op_id back over DataChannel
+        const room = roomRef.current;
+        if (room && room.state === ConnectionState.Connected && lastRenderedOpId) {
+          const report = {
+            event_type: "BOARD_SELECTION",
+            referenced_op_id: lastRenderedOpId,
+            label: "__interrupt_ack__",
+            payload: "",
+          };
+          const bytes = new TextEncoder().encode(JSON.stringify(report));
+          room.localParticipant.publishData(bytes, { reliable: true }).catch(() => {
+            // best-effort
+          });
+        }
+        // Clear board ops for the old turn
+        setBoardOperations([]);
+        break;
+      }
+      case "AVATAR_CUE": {
+        const cue = parsed as { cue?: string };
+        setTelemetryData((prev) => ({
+          ...prev,
+          vadState: cue.cue || prev.vadState,
+        }));
+        break;
+      }
+      default:
+        break;
     }
   }, []);
 
@@ -101,6 +219,30 @@ export default function ClassroomAudioShell({
             if (audioElementRef.current) {
               track.attach(audioElementRef.current);
             }
+
+            // Phase 7: Create silent zero-gain Web Audio tap on the remote
+            // MediaStream for RMS onset detection.  Audible playback stays
+            // strictly on the HTML audio element (AEC invariant).
+            const mediaStream = new MediaStream([
+              track.mediaStreamTrack,
+            ]);
+            const tap = createSilentTap(mediaStream);
+            silentTapRef.current = tap;
+
+            // Feed RMS to the playout clock onset detector
+            const rmsInterval = setInterval(() => {
+              if (tap && playoutClockRef.current) {
+                const rms = tap.getRms();
+                playoutClockRef.current.onRmsSample(rms);
+              }
+            }, 20); // 20ms polling
+
+            // Store cleanup ref
+            const prevDispose = tap.dispose;
+            tap.dispose = () => {
+              clearInterval(rmsInterval);
+              prevDispose();
+            };
           }
         });
 
@@ -109,25 +251,21 @@ export default function ClassroomAudioShell({
             if (audioElementRef.current) {
               track.detach(audioElementRef.current);
             }
+            // Clean up silent tap
+            if (silentTapRef.current) {
+              silentTapRef.current.dispose();
+              silentTapRef.current = null;
+            }
           }
         });
 
-        // Listen for Server-to-Client DataChannel events (BOARD_SCHEDULE, etc.)
+        // Listen for Server-to-Client DataChannel events
         room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
           if (!active) return;
           try {
             const rawText = new TextDecoder().decode(payload);
             const parsed = JSON.parse(rawText);
-
-            if (parsed.event_type === "BOARD_SCHEDULE") {
-              const scheduleEvent = parsed as BoardScheduleEvent;
-              if (scheduleEvent.operations && scheduleEvent.operations.length > 0) {
-                setBoardOperations((prev) => [
-                  ...prev,
-                  ...(scheduleEvent.operations as BoardOpWithPlacement[]),
-                ]);
-              }
-            }
+            handleDataChannelEvent(parsed);
           } catch {
             // Ignore non-JSON DataChannel packets defensively
           }
@@ -164,10 +302,14 @@ export default function ClassroomAudioShell({
       if (currentAudio) {
         currentAudio.srcObject = null;
       }
+      if (silentTapRef.current) {
+        silentTapRef.current.dispose();
+        silentTapRef.current = null;
+      }
       room.disconnect();
       roomRef.current = null;
     };
-  }, [sessionId, apiBase]);
+  }, [sessionId, apiBase, handleDataChannelEvent]);
 
   const toggleMute = async () => {
     const room = roomRef.current;
@@ -326,6 +468,9 @@ export default function ClassroomAudioShell({
           </div>
         </div>
       </main>
+
+      {/* Phase 7: Dev Telemetry HUD (hidden by default, ?hud=1 or Ctrl+Shift+H) */}
+      <TelemetryHud data={telemetryData} />
     </div>
   );
 }

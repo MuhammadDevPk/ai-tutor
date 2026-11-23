@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 from typing import Any, Protocol
 
 import httpx
@@ -50,13 +51,13 @@ class HttpGeminiClient:
 
     def _strip_code_fences(self, text: str) -> str:
         cleaned = text.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            cleaned = "\n".join(lines).strip()
+        fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+        if fence_match:
+            return fence_match.group(1).strip()
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return cleaned[start : end + 1].strip()
         return cleaned
 
     def extract_tree(self, pages: list[ParsedPage]) -> dict[str, Any]:

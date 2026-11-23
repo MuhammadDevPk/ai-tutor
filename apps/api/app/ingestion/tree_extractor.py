@@ -15,8 +15,8 @@ from app.schemas.syllabus import SyllabusNodeResponse
 class SyllabusNodeIn(BaseModel):
     title: str
     level: int = 1
-    page_start: int
-    page_end: int
+    page_start: int | None = None
+    page_end: int | None = None
     children: list["SyllabusNodeIn"] = Field(default_factory=list)
     path: str | None = None
 
@@ -43,22 +43,36 @@ def _parse_raw_tree(raw_tree: Any) -> list[SyllabusNodeIn]:
 def _assign_paths_and_flatten(
     nodes: list[SyllabusNodeIn],
     parent_path: str | None = None,
+    seen_paths: set[str] | None = None,
 ) -> list[SyllabusNodeIn]:
-    """Recursively assigns sanitized dot-separated ltree paths and flattens nodes."""
+    """Recursively assigns sanitized dot-separated ltree paths and flattens nodes.
+
+    Disambiguates duplicate paths among siblings or repeat headings.
+    """
+    if seen_paths is None:
+        seen_paths = set()
+
     flattened: list[SyllabusNodeIn] = []
     for node in nodes:
         segment = sanitize_heading_segment(node.title)
         if parent_path:
-            full_path = sanitize_syllabus_path(f"{parent_path}.{segment}")
+            base_path = sanitize_syllabus_path(f"{parent_path}.{segment}")
         else:
-            full_path = sanitize_syllabus_path(segment)
+            base_path = sanitize_syllabus_path(segment)
 
+        full_path = base_path
+        counter = 2
+        while full_path in seen_paths:
+            full_path = sanitize_syllabus_path(f"{base_path}_{counter}")
+            counter += 1
+
+        seen_paths.add(full_path)
         node.path = full_path
         flattened.append(node)
 
         if node.children:
             child_nodes = _assign_paths_and_flatten(
-                node.children, parent_path=full_path
+                node.children, parent_path=full_path, seen_paths=seen_paths
             )
             flattened.extend(child_nodes)
 
@@ -96,24 +110,39 @@ def build_page_mapping(tree: Any) -> dict[int, str]:
     # Map page -> (depth, is_leaf, path)
     page_records: dict[int, tuple[int, bool, str]] = {}
 
+    all_paths = {str(n.get("path")) for n in node_dicts if n.get("path")}
+
     for n in node_dicts:
         path = str(n.get("path") or "root")
         depth = len(path.split("."))
-        # If explicitly passed or has_children
-        is_leaf = not n.get("has_children", False)
-        page_start = int(n.get("page_start", 1))
-        page_end = int(n.get("page_end", page_start))
+        node_level = int(n.get("level") or depth)
+        effective_depth = max(depth, node_level)
+
+        # A node has children if flagged or if another path starts with path + '.'
+        has_children = bool(n.get("has_children")) or any(
+            p.startswith(f"{path}.") for p in all_paths if p != path
+        )
+        is_leaf = not has_children
+
+        raw_start = n.get("page_start")
+        raw_end = n.get("page_end")
+        if raw_start is None:
+            continue
+        page_start = int(raw_start)
+        page_end = int(raw_end) if raw_end is not None else page_start
+        if page_end < page_start:
+            page_end = page_start
 
         for p in range(page_start, page_end + 1):
             if p not in page_records:
-                page_records[p] = (depth, is_leaf, path)
+                page_records[p] = (effective_depth, is_leaf, path)
             else:
                 curr_depth, curr_leaf, _ = page_records[p]
                 # Deepest node wins; if equal depth, leaf wins
-                if depth > curr_depth:
-                    page_records[p] = (depth, is_leaf, path)
-                elif depth == curr_depth and is_leaf and not curr_leaf:
-                    page_records[p] = (depth, is_leaf, path)
+                if effective_depth > curr_depth:
+                    page_records[p] = (effective_depth, is_leaf, path)
+                elif effective_depth == curr_depth and is_leaf and not curr_leaf:
+                    page_records[p] = (effective_depth, is_leaf, path)
 
     return {p: rec[2] for p, rec in page_records.items()}
 

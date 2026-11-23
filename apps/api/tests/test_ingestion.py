@@ -15,7 +15,7 @@ from app.ingestion.chunker import (
     sanitize_syllabus_path,
 )
 from app.ingestion.embeddings import FakeEmbedder, FastEmbedder
-from app.ingestion.parser import detect_needs_vision, parse_pdf
+from app.ingestion.parser import ParsedPage, detect_needs_vision, parse_pdf
 from app.ingestion.service import IngestionService
 
 
@@ -306,3 +306,62 @@ def test_real_fastembed_embedder_dimension():
     results = embedder.embed_texts(["Mathematical physics and statistics sample."])
     assert len(results) == 1
     assert len(results[0]) == 384
+
+
+def test_nested_latex_environment_preservation():
+    r"""Adversarial test: nested LaTeX environments
+
+    (\begin{aligned} in \begin{equation}) must NOT terminate on the inner \end
+    and must capture the complete expression.
+    """
+    nested_md = (
+        "Here is a system of equations:\n\n"
+        "\\begin{equation}\n"
+        "\\begin{aligned}\n"
+        "\\nabla \\cdot \\mathbf{E} &= \\frac{\\rho}{\\epsilon_0} \\\\\n"
+        "\\nabla \\times \\mathbf{B} &= \\mu_0 \\mathbf{J}\n"
+        "\\end{aligned}\n"
+        "\\end{equation}\n\n"
+        "Maxwell's equations in vacuum."
+    )
+    extracted = extract_raw_latex(nested_md)
+    assert len(extracted) == 1
+    full_expr = extracted[0]
+    assert "\\begin{equation}" in full_expr
+    assert "\\begin{aligned}" in full_expr
+    assert "\\end{aligned}" in full_expr
+    assert "\\end{equation}" in full_expr
+
+    # Verify chunking keeps nested block unbroken
+    page = ParsedPage(
+        page_number=1,
+        markdown=nested_md,
+        text_density=len(nested_md),
+        needs_vision=False,
+    )
+    chunks = chunk_pages(
+        course_id=uuid4(),
+        pages=[page],
+        syllabus_mapping={1: "physics.maxwell"},
+    )
+    assert len(chunks) == 1
+    assert "\\begin{equation}" in chunks[0].markdown
+    assert "\\end{equation}" in chunks[0].markdown
+
+
+def test_heading_sanitization_length_bounds():
+    """Adversarial test: headings with > 255 characters must be bounded
+
+    so PostgreSQL ltree labels never exceed 255 chars.
+    """
+    long_title = "A" * 300
+    segment = sanitize_heading_segment(long_title)
+    assert len(segment) <= 255
+    path = sanitize_syllabus_path(f"ch01.{long_title}")
+    assert len(path.split(".")[1]) <= 255
+
+
+def test_corrupted_pdf_handling():
+    """Adversarial test: corrupted or non-PDF bytes raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid or corrupted PDF file"):
+        parse_pdf(b"this is completely invalid garbage, not a pdf file at all")

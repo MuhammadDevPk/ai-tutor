@@ -62,12 +62,17 @@ def parse_pdf(pdf_source: bytes | str | Path) -> list[ParsedPage]:
     and a needs_vision flag.
     """
     doc: Any = None
-    if isinstance(pdf_source, (str, Path)):
-        doc = pymupdf.open(str(pdf_source))
-    elif isinstance(pdf_source, (bytes, bytearray)):
-        doc = pymupdf.open(stream=bytes(pdf_source), filetype="pdf")
-    else:
-        raise TypeError(f"Unsupported pdf_source type: {type(pdf_source)}")
+    try:
+        if isinstance(pdf_source, (str, Path)):
+            doc = pymupdf.open(str(pdf_source))
+        elif isinstance(pdf_source, (bytes, bytearray)):
+            doc = pymupdf.open(stream=bytes(pdf_source), filetype="pdf")
+        else:
+            raise TypeError(f"Unsupported pdf_source type: {type(pdf_source)}")
+    except Exception as e:
+        if isinstance(e, TypeError):
+            raise
+        raise ValueError(f"Invalid or corrupted PDF file: {e}") from e
 
     try:
         page_chunks = pymupdf4llm.to_markdown(doc, page_chunks=True)
@@ -88,7 +93,7 @@ def parse_pdf(pdf_source: bytes | str | Path) -> list[ParsedPage]:
         for idx, chunk in enumerate(page_chunks):
             metadata = chunk.get("metadata", {})
             page_num = metadata.get("page_number") or metadata.get("page") or (idx + 1)
-            raw_text = chunk.get("text", "")
+            raw_text = chunk.get("text", "").replace("\x00", "")
 
             density, needs_vision = detect_needs_vision(raw_text)
             pages.append(

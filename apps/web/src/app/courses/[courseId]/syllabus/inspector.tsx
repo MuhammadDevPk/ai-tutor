@@ -47,7 +47,20 @@ export default function SyllabusInspector({ courseId }: { courseId: string }) {
         setTree(data);
         setError(null);
         if (data.nodes.length > 0) {
-          setSelectedNode((prev) => prev ?? data.nodes[0]);
+          setSelectedNode((prev) => {
+            if (!prev) return data.nodes[0];
+            const findNode = (nodes: SyllabusNode[]): SyllabusNode | null => {
+              for (const n of nodes) {
+                if (n.path === prev.path || n.id === prev.id) return n;
+                if (n.children) {
+                  const found = findNode(n.children);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            return findNode(data.nodes) ?? data.nodes[0];
+          });
         }
       } catch (err: unknown) {
         if (!ignore) {
@@ -264,11 +277,19 @@ export default function SyllabusInspector({ courseId }: { courseId: string }) {
                     <h2 className="mt-1 text-xl font-bold text-zinc-900">{selectedNode.title}</h2>
                   </div>
 
-                  {selectedNode.page_start !== null && selectedNode.page_start !== undefined && (
-                    <div className="text-right text-xs text-zinc-500 font-mono">
-                      <span>Pages {selectedNode.page_start} - {selectedNode.page_end ?? selectedNode.page_start}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {selectedNode.page_start !== null && selectedNode.page_start !== undefined && (
+                      <div className="text-right text-xs text-zinc-500 font-mono">
+                        <span>Pages {selectedNode.page_start} - {selectedNode.page_end ?? selectedNode.page_start}</span>
+                      </div>
+                    )}
+                    <a
+                      href={`/classroom?courseId=${courseId}&chapter=${encodeURIComponent(selectedNode.path)}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors shadow-xs"
+                    >
+                      Start Chapter
+                    </a>
+                  </div>
                 </div>
 
                 {selectedNode.summary && (
@@ -398,7 +419,7 @@ function TreeNodeList({
                 <span className="truncate">{node.title}</span>
               </div>
               {node.page_start !== null && node.page_start !== undefined && (
-                <span className="text-2xs text-zinc-400 font-mono shrink-0 ml-1">
+                <span className="text-[10px] text-zinc-400 font-mono shrink-0 ml-1">
                   p.{node.page_start}
                 </span>
               )}

@@ -24,6 +24,7 @@ class SessionResponse(BaseModel):
     preferences: dict[str, Any] = Field(default_factory=dict)
     resume_stack: list[dict[str, Any]] = Field(default_factory=list)
     board_snapshot: dict[str, Any] = Field(default_factory=dict)
+    fsm_data: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

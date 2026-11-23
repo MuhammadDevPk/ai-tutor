@@ -32,8 +32,10 @@ class Settings:
     GROQ_BASE_URL: str = os.environ.get(
         "GROQ_BASE_URL", "https://api.groq.com/openai/v1"
     )
-    OLLAMA_BASE_URL: str = os.environ.get("OLLAMA_BASE_URL", "")
-    LLM_REQUEST_TIMEOUT_S: float = float(os.environ.get("LLM_REQUEST_TIMEOUT_S", "60"))
+    LLM_REQUEST_TIMEOUT_S: float = float(
+        os.environ.get("LLM_REQUEST_TIMEOUT_S", "30.0")
+    )
+    OLLAMA_BASE_URL: str = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 settings = Settings()

@@ -1,15 +1,15 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 1 — Repository Scaffold & Single-Owner Schema
-- **Status:** NOT_STARTED | GRILL_DONE | TESTS_APPROVED | IN_PROGRESS | PASSED
-- **Last Verified Commit:** `<git-sha>` (`./scripts/verify.sh --full` exit 0)
-- **Next Concrete Task:** Run Pre-Phase 1 Grill, then bootstrap `apps/web`, `apps/api`, and Alembic migration 001
-- **Open Blockers / Manual Checks Needed:** None
+- **Active Phase:** Phase 2 — Math-Aware PDF Ingestion & Scoped RAG Pipeline
+- **Status:** Phase 1 PASSED (operator-verified 2026-11-23: verify.sh --full exit 0, 15 pytest tests green, fail-without-change audit on the ltree repository passed — inverting the `<@` operator fails 3 fencing tests; auth + course CRUD smoke-tested live)
+- **Last Verified Commit:** phase-1-scaffold branch push (base `5630a09`)
+- **Next Concrete Task:** Phase 2 ingestion pipeline (PyMuPDF4LLM default per operator grill), Gemini client behind an interface until the AI Studio key is provisioned
+- **Open Blockers / Manual Checks Needed:** Google AI Studio API key not yet provisioned — Phase 2 live Gemini gates (tree extraction, Vision fallback) verify once Malik provides it; all other Phase 2 work proceeds with fixture-tested clients
 
 ---
 ## Phase Index & Core TDD Checkpoints
-- [ ] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]**
+- [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
 - [ ] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector
 - [ ] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]**
 - [ ] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler

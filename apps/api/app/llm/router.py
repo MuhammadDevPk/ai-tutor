@@ -225,12 +225,20 @@ class LLMRouter:
 
             try:
                 async for delta in provider.stream(messages):
+                    if not delta:
+                        continue
                     deltas_yielded += 1
                     partial_text += delta
                     yield RoutedDelta(
                         text=delta,
                         provider=provider.name,
                         model=provider.model,
+                    )
+
+                if deltas_yielded == 0:
+                    raise ProviderError(
+                        f"Provider {provider.name}/{provider.model} "
+                        "yielded empty response"
                     )
 
                 self._record_event(
@@ -244,6 +252,14 @@ class LLMRouter:
 
             except Exception as exc:
                 last_error = exc
+                status_code = getattr(exc, "status_code", None)
+                if (
+                    status_code is None
+                    and hasattr(exc, "response")
+                    and exc.response is not None
+                ):
+                    status_code = getattr(exc.response, "status_code", None)
+
                 if deltas_yielded > 0:
                     # Failed after yielding at least one delta: do NOT switch
                     self._record_event(
@@ -251,6 +267,7 @@ class LLMRouter:
                             event_type="interrupted",
                             provider=provider.name,
                             model=provider.model,
+                            status_code=status_code,
                             error=str(exc),
                         )
                     )
@@ -261,8 +278,6 @@ class LLMRouter:
                     ) from exc
 
                 # Failed BEFORE yielding any delta
-                status_code = getattr(exc, "status_code", None)
-
                 # 4xx other than 429 is a hard error (no failover)
                 if (
                     status_code is not None

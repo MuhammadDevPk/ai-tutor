@@ -24,6 +24,12 @@ def sanitize_say_text(text: str) -> str:
     cleaned = re.sub(r"\$(.*?)\$", r"\1", cleaned)
     # Strip common stray backslash math commands if any leak through
     cleaned = re.sub(r"\\[a-zA-Z]+", "", cleaned)
+    # Strip residual curly braces from stripped LaTeX commands
+    cleaned = re.sub(r"[{}]", "", cleaned)
+    # Strip accidental unclosed / stray $ delimiters before TTS
+    cleaned = cleaned.replace("$", "")
+    # Normalize multiple whitespace
+    cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip()
 
 
@@ -87,9 +93,10 @@ class LineStreamParser:
 
             if prefix in KNOWN_DIRECTIVES:
                 if prefix == "SAY":
-                    return SayEvent(text=payload) if payload else None
+                    sanitized = sanitize_say_text(payload)
+                    return SayEvent(text=sanitized) if sanitized else None
                 elif prefix == "LATEX":
-                    return LatexEvent(latex=payload)
+                    return LatexEvent(latex=payload) if payload else None
                 elif prefix == "PLOT":
                     try:
                         spec = json.loads(payload)
@@ -130,14 +137,16 @@ class LineStreamParser:
                         )
 
             # Prefix with colon not in KNOWN_DIRECTIVES: models drift; treat as SAY
-            return SayEvent(text=stripped)
+            sanitized = sanitize_say_text(stripped)
+            return SayEvent(text=sanitized) if sanitized else None
 
         # No colon in stripped line
         if stripped == "CLEAR":
             return ClearEvent()
 
         # Any other non-empty line treated as SAY
-        return SayEvent(text=stripped)
+        sanitized = sanitize_say_text(stripped)
+        return SayEvent(text=sanitized) if sanitized else None
 
     def feed(self, text_delta: str) -> list[ParsedEvent]:
         """Buffer text_delta and emit ParsedEvents for all complete lines."""

@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DocumentChunk, SyllabusNode, SyllabusTree } from "@/lib/api-client";
+import { useRouter } from "next/navigation";
+import type { DocumentChunk, Session, SyllabusNode, SyllabusTree } from "@/lib/api-client";
 
 export default function SyllabusInspector({ courseId }: { courseId: string }) {
-
+  const router = useRouter();
   const [tree, setTree] = useState<SyllabusTree | null>(null);
   const [selectedNode, setSelectedNode] = useState<SyllabusNode | null>(null);
   const [chunks, setChunks] = useState<DocumentChunk[]>([]);
   const [loadingTree, setLoadingTree] = useState(true);
   const [loadingChunks, setLoadingChunks] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
 
@@ -179,6 +181,31 @@ export default function SyllabusInspector({ courseId }: { courseId: string }) {
     }
   };
 
+  const handleStartChapter = async (nodePath: string) => {
+    try {
+      setStartingSession(true);
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      };
+      const res = await fetch(`${apiBase}/courses/${courseId}/sessions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ active_chapter_path: nodePath }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Failed to start session: HTTP ${res.status}`);
+      }
+      const session: Session = await res.json();
+      router.push(`/classroom/${session.id}`);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to start chapter session");
+    } finally {
+      setStartingSession(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50 text-zinc-900 font-sans">
       {/* Top Navbar */}
@@ -283,12 +310,13 @@ export default function SyllabusInspector({ courseId }: { courseId: string }) {
                         <span>Pages {selectedNode.page_start} - {selectedNode.page_end ?? selectedNode.page_start}</span>
                       </div>
                     )}
-                    <a
-                      href={`/classroom?courseId=${courseId}&chapter=${encodeURIComponent(selectedNode.path)}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors shadow-xs"
+                    <button
+                      onClick={() => handleStartChapter(selectedNode.path)}
+                      disabled={startingSession}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-md transition-colors shadow-xs"
                     >
-                      Start Chapter
-                    </a>
+                      {startingSession ? "Starting..." : "Start Chapter"}
+                    </button>
                   </div>
                 </div>
 

@@ -26,6 +26,8 @@ class Settings:
     DEV_USER_ID: UUID = UUID(
         os.environ.get("DEV_USER_ID", "00000000-0000-0000-0000-000000000001")
     )
+    GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
 
 settings = Settings()

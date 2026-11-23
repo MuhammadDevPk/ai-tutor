@@ -21,7 +21,9 @@ class SyllabusNodeBase(BaseModel):
 
 
 class SyllabusNodeCreate(SyllabusNodeBase):
-    pass
+    level: int = 1
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 class SyllabusNodeResponse(SyllabusNodeBase):
@@ -29,8 +31,12 @@ class SyllabusNodeResponse(SyllabusNodeBase):
 
     id: UUID
     course_id: UUID
-    created_at: datetime
-    updated_at: datetime
+    level: int = 1
+    page_start: int | None = None
+    page_end: int | None = None
+    children: list["SyllabusNodeResponse"] = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class SyllabusTreeResponse(BaseModel):

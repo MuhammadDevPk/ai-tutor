@@ -1,16 +1,16 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 2 — Math-Aware PDF Ingestion & Scoped RAG Pipeline
-- **Status:** Phase 1 PASSED (operator-verified 2026-11-23: verify.sh --full exit 0, 15 pytest tests green, fail-without-change audit on the ltree repository passed — inverting the `<@` operator fails 3 fencing tests; auth + course CRUD smoke-tested live)
-- **Last Verified Commit:** phase-1-scaffold branch push (base `5630a09`)
-- **Next Concrete Task:** Phase 2 ingestion pipeline (PyMuPDF4LLM default per operator grill), Gemini client behind an interface until the AI Studio key is provisioned
-- **Open Blockers / Manual Checks Needed:** Google AI Studio API key not yet provisioned — Phase 2 live Gemini gates (tree extraction, Vision fallback) verify once Malik provides it; all other Phase 2 work proceeds with fixture-tested clients
+- **Active Phase:** Phase 3 — Model-bucket LLM router & line-delimited stream parser
+- **Status:** Phase 2 PASSED (operator-verified 2026-11-23: verify.sh --full exit 0 with 9 steps incl. the new web production build, 24 pytest tests green, migrations 002+003 live; both API keys proven with live calls — Gemini list-models + generate, Groq list-models + chat; Syllabus Inspector browser-tested end to end on the production build: dev sign-in, tree render, scoped chunk load, zero page errors)
+- **Last Verified Commit:** phase-2-ingestion branch push (base: phase-1-scaffold)
+- **Next Concrete Task:** Phase 3 router + line-stream parser (core module, STOP-FOR-TEST-REVIEW: tests first, fail-first). Live gates use the vault-connected Groq + Gemini keys via the operator's connector helpers; the app reads keys from env settings.
+- **Open Blockers / Manual Checks Needed:** gemini-3.8-flash returned HTTP 503 twice on 2026-11-23 while gemini-2.5-flash worked (model-side availability, key is valid); the Phase 3 router waterfall must tolerate a 503 on the primary Gemini model. Merge policy: Malik proposed autonomous open+merge on 2026-11-23; scope (tutor only vs all repos) asked, awaiting his answer — until then nothing merges.
 
 ---
 ## Phase Index & Core TDD Checkpoints
 - [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
-- [ ] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector
+- [x] **Phase 2:** Math-aware PDF ingestion, Gemini Vision fallback, Syllabus Inspector — PASSED 2026-11-23
 - [ ] **Phase 3:** Model-bucket LLM router & line-delimited stream parser **[STOP-FOR-TEST-REVIEW: line-stream parser]**
 - [ ] **Phase 4:** Explicit 5-state Pedagogical FSM & 4,000-token budget assembler
 - [ ] **Phase 5:** LiveKit voice transport, server Kokoro TTS & two-stage barge-in **[STOP-FOR-TEST-REVIEW: Whisper backchannel/hallucination guard]**

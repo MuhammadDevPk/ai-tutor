@@ -22,5 +22,7 @@ export type BoardOp = Schemas["BoardOp"];
 
 export type SyllabusNode = Schemas["SyllabusNodeResponse"];
 export type SyllabusTree = Schemas["SyllabusTreeResponse"];
+export type DocumentChunk = Schemas["DocumentChunkResponse"];
+export type DocumentUpload = Schemas["DocumentUploadResponse"];
 export type Session = Schemas["SessionResponse"];
 export type SessionEvent = Schemas["SessionEventResponse"];

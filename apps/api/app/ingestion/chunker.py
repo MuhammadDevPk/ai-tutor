@@ -8,8 +8,9 @@ from app.db.ltree_repository import sanitize_ltree_path
 from app.ingestion.parser import ParsedPage
 
 # Matches display math blocks ($$...$$, \[...\], \begin{...}...\end{...})
+# Uses backreference \2 to capture nested environments intact.
 DISPLAY_MATH_REGEX = re.compile(
-    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\begin\{[a-zA-Z*]+\}.*?\\end\{[a-zA-Z*]+\})",
+    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\begin\{([a-zA-Z*]+)\}.*?\\end\{\2\})",
     re.DOTALL,
 )
 
@@ -26,8 +27,12 @@ class DocumentChunk(BaseModel):
 
 
 def sanitize_heading_segment(segment: str) -> str:
-    """Sanitizes a string into a valid ltree label matching [A-Za-z0-9_]+."""
+    """Sanitizes a string into a valid ltree label matching [A-Za-z0-9_]+.
+
+    Truncates to at most 255 characters to comply with PostgreSQL ltree limits.
+    """
     cleaned = re.sub(r"[^A-Za-z0-9_]+", "_", segment.strip().lower()).strip("_")
+    cleaned = cleaned[:255].rstrip("_")
     return cleaned if cleaned else "sec"
 
 
@@ -40,7 +45,7 @@ def sanitize_syllabus_path(path: str) -> str:
 
 def extract_raw_latex(markdown: str) -> list[str]:
     """Extracts raw LaTeX expressions from display math blocks and environments."""
-    matches = DISPLAY_MATH_REGEX.findall(markdown)
+    matches = [m.group(0) for m in DISPLAY_MATH_REGEX.finditer(markdown)]
     results: list[str] = []
     for match in matches:
         text = match.strip()

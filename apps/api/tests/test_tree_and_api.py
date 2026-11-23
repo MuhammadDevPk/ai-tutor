@@ -14,6 +14,7 @@ from app.ingestion.parser import ParsedPage
 from app.ingestion.service import IngestionService
 from app.ingestion.tree_extractor import (
     SyllabusNodeIn,
+    assemble_tree,
     build_page_mapping,
     extract_and_persist_tree,
 )
@@ -381,3 +382,152 @@ def test_api_upload_document_get_syllabus_and_scoped_chunks(
     finally:
         app.dependency_overrides.pop(get_gemini_client, None)
         app.dependency_overrides.pop(get_embedder, None)
+
+
+def test_duplicate_heading_paths_disambiguation():
+    """Adversarial test: sibling nodes with identical titles (e.g. multiple 'Exercises'
+
+    or 'Review' sections) must receive distinct ltree paths and neither must be lost
+    when assembled into the syllabus tree.
+    """
+    raw_nodes = [
+        SyllabusNodeIn(
+            title="Introduction",
+            level=1,
+            page_start=1,
+            page_end=2,
+            children=[
+                SyllabusNodeIn(
+                    title="Exercises",
+                    level=2,
+                    page_start=1,
+                    page_end=1,
+                    children=[],
+                ),
+                SyllabusNodeIn(
+                    title="Exercises",
+                    level=2,
+                    page_start=2,
+                    page_end=2,
+                    children=[],
+                ),
+            ],
+        ),
+        SyllabusNodeIn(
+            title="Introduction",  # Duplicate top-level chapter title
+            level=1,
+            page_start=3,
+            page_end=4,
+            children=[],
+        ),
+    ]
+
+    from app.ingestion.tree_extractor import _assign_paths_and_flatten
+
+    flattened = _assign_paths_and_flatten(raw_nodes)
+    paths = [n.path for n in flattened]
+
+    # Every node gets a unique path
+    assert len(paths) == len(set(paths))
+    assert "introduction" in paths
+    assert "introduction.exercises" in paths
+    assert "introduction.exercises_2" in paths
+    assert "introduction_2" in paths
+
+    # Assembling into tree preserves all 4 nodes without dropping duplicates
+    raw_dicts = [
+        n.model_dump() | {"id": uuid4(), "course_id": uuid4()} for n in flattened
+    ]
+    assembled = assemble_tree(raw_dicts)
+    assert len(assembled) == 2
+    assert len(assembled[0].children) == 2
+
+
+def test_build_page_mapping_defensive_nulls_and_raw_db_dicts():
+    """Adversarial test: build_page_mapping handles null page_start/page_end gracefully
+
+    and works with raw database dict rows where has_children is absent.
+    """
+    # 1. Null page_start should skip without TypeError
+    nodes_with_null = [
+        {"path": "ch01", "level": 1, "page_start": None, "page_end": None},
+        {"path": "ch02", "level": 1, "page_start": 3, "page_end": 4},
+    ]
+    mapping = build_page_mapping(nodes_with_null)
+    assert 3 in mapping
+    assert mapping[3] == "ch02"
+    assert mapping[4] == "ch02"
+
+    # 2. Raw DB dicts without has_children: child path ch01.t01 wins for page 1
+    db_rows = [
+        {"path": "ch01", "level": 1, "page_start": 1, "page_end": 3},
+        {"path": "ch01.t01", "level": 2, "page_start": 1, "page_end": 2},
+    ]
+    mapping_db = build_page_mapping(db_rows)
+    assert mapping_db[1] == "ch01.t01"
+    assert mapping_db[2] == "ch01.t01"
+    assert mapping_db[3] == "ch01"
+
+
+def test_api_syllabus_endpoints_auth_and_tenant_isolation(auth_headers: dict[str, str]):
+    """Adversarial test:
+
+    - Unauthenticated calls to upload, syllabus, and chunks return 401.
+    - User B accessing User A's course receives 404 (tenant isolation).
+    """
+    client = TestClient(app)
+
+    # 1. Create course as User A
+    course_resp = client.post(
+        "/courses",
+        json={
+            "course_code": f"AUTH{uuid4().hex[:4].upper()}",
+            "title": "Auth Isolation Course",
+            "baseline_skill": "foundational",
+        },
+        headers=auth_headers,
+    )
+    assert course_resp.status_code == 201
+    course_id = course_resp.json()["id"]
+
+    try:
+        # 2. Unauthenticated calls -> 401
+        res_upload_unauth = client.post(
+            f"/courses/{course_id}/documents",
+            files={"file": ("test.pdf", b"%PDF-1.4 empty", "application/pdf")},
+        )
+        assert res_upload_unauth.status_code == 401
+
+        res_syllabus_unauth = client.get(f"/courses/{course_id}/syllabus")
+        assert res_syllabus_unauth.status_code == 401
+
+        res_chunks_unauth = client.get(
+            f"/courses/{course_id}/syllabus/chunks?path=root"
+        )
+        assert res_chunks_unauth.status_code == 401
+
+        # 3. User B (different user token) -> 404
+        other_user_token = create_access_token(user_id=uuid4())
+        other_headers = {"Authorization": f"Bearer {other_user_token}"}
+
+        res_upload_other = client.post(
+            f"/courses/{course_id}/documents",
+            files={"file": ("test.pdf", b"%PDF-1.4 empty", "application/pdf")},
+            headers=other_headers,
+        )
+        assert res_upload_other.status_code == 404
+
+        res_syllabus_other = client.get(
+            f"/courses/{course_id}/syllabus",
+            headers=other_headers,
+        )
+        assert res_syllabus_other.status_code == 404
+
+        res_chunks_other = client.get(
+            f"/courses/{course_id}/syllabus/chunks?path=root",
+            headers=other_headers,
+        )
+        assert res_chunks_other.status_code == 404
+
+    finally:
+        client.delete(f"/courses/{course_id}", headers=auth_headers)

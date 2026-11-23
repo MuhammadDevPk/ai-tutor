@@ -182,12 +182,18 @@ async def upload_document(
         embedder=embedder,
         gemini_client=gemini_client,
     )
-    result = await service.ingest_document(
-        course_id=course_id,
-        document_bytes=file_bytes,
-        filename=filename or "document.pdf",
-        use_tree_extraction=use_tree_extraction,
-    )
+    try:
+        result = await service.ingest_document(
+            course_id=course_id,
+            document_bytes=file_bytes,
+            filename=filename or "document.pdf",
+            use_tree_extraction=use_tree_extraction,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
 
     tree_count = result.tree_nodes
     if tree_count == 0:
@@ -261,5 +267,6 @@ async def get_syllabus_chunks(
     rows = await repo.query_document_chunks(
         course_id=course_id,
         scope_path=valid_path,
+        limit=100,
     )
     return [DocumentChunkResponse.model_validate(r) for r in rows]

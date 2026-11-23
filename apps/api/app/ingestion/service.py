@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -13,6 +14,8 @@ from app.ingestion.embeddings import BaseEmbedder, FastEmbedder
 from app.ingestion.gemini_client import GeminiClient
 from app.ingestion.parser import ParsedPage, parse_pdf
 from app.ingestion.tree_extractor import build_page_mapping, extract_and_persist_tree
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionResult(BaseModel):
@@ -76,13 +79,21 @@ class IngestionService:
                             pdf_page = doc[p_idx]
                             pix = pdf_page.get_pixmap()
                             png_bytes = pix.tobytes("png")
-                            vision_text = self._gemini_client.vision_extract_text(
-                                page_image_png=png_bytes,
-                                page_number=page.page_number,
-                            )
-                            if vision_text and vision_text.strip():
-                                page.markdown = vision_text.strip()
-                                page.needs_vision = False
+                            try:
+                                vision_text = self._gemini_client.vision_extract_text(
+                                    page_image_png=png_bytes,
+                                    page_number=page.page_number,
+                                )
+                                if vision_text and vision_text.strip():
+                                    page.markdown = vision_text.strip()
+                                    page.text_density = len(page.markdown)
+                                    page.needs_vision = False
+                            except Exception as err:
+                                logger.warning(
+                                    "Vision fallback failed for page %s: %s",
+                                    page.page_number,
+                                    err,
+                                )
             finally:
                 if doc is not None:
                     doc.close()
@@ -121,11 +132,18 @@ class IngestionService:
         async with self._get_conn() as conn:
             async with conn.transaction():
                 async with conn.cursor() as cur:
-                    delete_query = (
-                        "DELETE FROM document_chunks "
-                        "WHERE course_id = %s AND source_filename = %s;"
-                    )
-                    await cur.execute(delete_query, (str(course_id), filename))
+                    if filename is None:
+                        delete_query = (
+                            "DELETE FROM document_chunks "
+                            "WHERE course_id = %s AND source_filename IS NULL;"
+                        )
+                        await cur.execute(delete_query, (str(course_id),))
+                    else:
+                        delete_query = (
+                            "DELETE FROM document_chunks "
+                            "WHERE course_id = %s AND source_filename = %s;"
+                        )
+                        await cur.execute(delete_query, (str(course_id), filename))
 
                     if chunks:
                         insert_query = """

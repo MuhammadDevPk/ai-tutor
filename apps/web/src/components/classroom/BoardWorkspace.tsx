@@ -1,5 +1,6 @@
 "use client";
 
+import "@excalidraw/excalidraw/index.css";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type {
@@ -434,7 +435,7 @@ export default function BoardWorkspace({
       )}
 
       {/* Main Excalidraw Canvas Container */}
-      <div className="relative flex-1 w-full h-[540px]">
+      <div className="relative flex-1 w-full min-h-0">
         <Excalidraw
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           viewModeEnabled={viewingArchiveIndex !== null}

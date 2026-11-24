@@ -155,7 +155,7 @@ class KokoroTTS:
         self,
         model_path: str = "kokoro-v0_19.onnx",
         voices_path: str = "voices.bin",
-        voice: str = "af_heart",
+        voice: str = "af_sarah",
     ) -> None:
         self.model_path = model_path
         self.voices_path = voices_path

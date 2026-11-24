@@ -1,11 +1,11 @@
 # ROADMAP.md — Active State & Phase Gates
 
 ## Current Session Handoff (Update at End of Every Session)
-- **Active Phase:** Phase 9 — Session persistence, interactive replay & exam study exports
-- **Status:** Phase 8 PASSED (2026-11-23: verify.sh --full exit 0, 9 steps, 203 pytest green; TalkingHead v1.8.2 + Three.js 0.186.1; pure TS FLIP layout engine (apps/web/src/lib/avatar/flipLayout.ts) and Expression Mapper (apps/web/src/lib/avatar/expressionMapper.ts); HeadAudio worklet bridge reading Phase 7 silent zero-gain Web Audio tap read-only; permanent root WebGL canvas with 280ms GPU FLIP transition between FULL_AVATAR and 200x200px rounded PIP_WHITEBOARD; LayoutPinControl emitting LAYOUT_OVERRIDE; clean fallback placeholder state when .glb is absent).
-- **Last Verified Commit:** phase-8-avatar branch (@ 6a7f393)
-- **Next Concrete Task:** Phase 9 session persistence, reload recovery flow, interactive timeline replayer, and one-click study exporter.
-- **Open Blockers / Manual Checks Needed:** Phase 5/6/7/8 live hardware gates remain UNVERIFIED (voice loop, 300% zoom sharpness, ±150ms sync, step-1 interrupt, 50 rapid FLIP toggles, audio-locked lip-sync accuracy, 25-35% laptop CPU & quiet fan acoustics with real .glb asset). Model .glb asset: Malik drops the real Mixamo/ARKit file into apps/web/public/models/avatar.glb. Merge policy: autonomous open+merge for ai-tutor ONLY. Review flow: fresh Antigravity reviewer per phase; zero-change reviewer runs are stalled — restart them.
+- **Active Phase:** Phase 10 — Soak testing, chaos validation & $0 deployment hardening
+- **Status:** Phase 9 PASSED (2026-11-24: verify.sh --full exit 0, 9 steps, 210 pytest green; Alembic migration 005 added snapshot JSONB column to tutor_sessions and performance indexes; turn-boundary snapshot persistence storing canonical BoardOp payloads, slide strip refs, ltree lock, and FSM cursor; reload recovery restoring exact Excalidraw board on refresh with client-side MathJax/plot SVG hydration; interactive event-sourced timeline replayer with scrubber, dialogue transcript, and click-to-copy clean raw LaTeX; study exporter producing Markdown and print-friendly HTML cheat sheets with all formulas and cleared misconceptions from INTERRUPT_QA; client-side MediaRecorder WebM export; read-only course mastery dashboard aggregating completion % and weak subtopics ranking).
+- **Last Verified Commit:** phase-9-persistence branch
+- **Next Concrete Task:** Phase 10 soak testing (45-minute continuous run), chaos validation (Groq 429 failover), Supabase keep-alive, and $0 deployment manifests.
+- **Open Blockers / Manual Checks Needed:** Phase 5/6/7/8/9 live hardware gates remain UNVERIFIED (voice loop, 300% zoom sharpness, ±150ms sync, step-1 interrupt, 50 rapid FLIP toggles, audio-locked lip-sync accuracy, 25-35% laptop CPU & quiet fan acoustics with real .glb asset; manual browser refresh mid-chapter state check). Model .glb asset: Malik drops the real Mixamo/ARKit file into apps/web/public/models/avatar.glb. Merge policy: autonomous open+merge for ai-tutor ONLY. Review flow: fresh Antigravity reviewer per phase; zero-change reviewer runs are stalled — restart them.
 ---
 ## Phase Index & Core TDD Checkpoints
 - [x] **Phase 1:** Scaffold, Supabase `vector` + `ltree` migration, OpenAPI sync **[STOP-FOR-TEST-REVIEW: `ltree` scoping repository]** — PASSED 2026-11-23
@@ -16,7 +16,7 @@
 - [x] **Phase 6:** Excalidraw native-SVG whiteboard, spatial allocator & circle-to-ask **[STOP-FOR-TEST-REVIEW: spatial whiteboard allocator]**
 - [x] **Phase 7:** Sample-accurate playout clock sync & barge-in rollback **[STOP-FOR-TEST-REVIEW: playout clock scheduler]**
 - [x] **Phase 8:** TalkingHead 3D avatar (30fps) & GPU FLIP Full-to-PiP transitions — PASSED 2026-11-23
-- [ ] **Phase 9:** Reload persistence, interactive timeline replay & cheat-sheet exports
+- [x] **Phase 9:** Reload persistence, interactive timeline replay & cheat-sheet exports — PASSED 2026-11-24
 - [ ] **Phase 10:** 45-minute soak test, 429 chaos drill, Supabase keep-alive & $0 deploy
 
 ---

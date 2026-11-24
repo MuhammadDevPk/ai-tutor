@@ -169,6 +169,89 @@
         "title": "Body_upload_document_courses__course_id__documents_post",
         "type": "object"
       },
+      "ChapterMasteryItem": {
+        "properties": {
+          "chapter_path": {
+            "title": "Chapter Path",
+            "type": "string"
+          },
+          "interrupt_qa_count": {
+            "default": 0,
+            "title": "Interrupt Qa Count",
+            "type": "integer"
+          },
+          "sessions_count": {
+            "default": 0,
+            "title": "Sessions Count",
+            "type": "integer"
+          },
+          "status": {
+            "default": "not_started",
+            "description": "'completed', 'in_progress', or 'not_started'",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chapter_path",
+          "title"
+        ],
+        "title": "ChapterMasteryItem",
+        "type": "object"
+      },
+      "CheatSheetResponse": {
+        "properties": {
+          "chapter_path": {
+            "title": "Chapter Path",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "formulas": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaItem"
+            },
+            "title": "Formulas",
+            "type": "array"
+          },
+          "markdown": {
+            "title": "Markdown",
+            "type": "string"
+          },
+          "misconceptions": {
+            "items": {
+              "$ref": "#/components/schemas/MisconceptionItem"
+            },
+            "title": "Misconceptions",
+            "type": "array"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "course_id",
+          "chapter_path",
+          "chapter_title",
+          "markdown"
+        ],
+        "title": "CheatSheetResponse",
+        "type": "object"
+      },
       "CourseCreate": {
         "properties": {
           "baseline_skill": {
@@ -224,6 +307,49 @@
           "total"
         ],
         "title": "CourseListResponse",
+        "type": "object"
+      },
+      "CourseMasteryResponse": {
+        "properties": {
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterMasteryItem"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
+          "completed_chapters": {
+            "default": 0,
+            "title": "Completed Chapters",
+            "type": "integer"
+          },
+          "completion_percentage": {
+            "default": 0.0,
+            "title": "Completion Percentage",
+            "type": "number"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "total_chapters": {
+            "default": 0,
+            "title": "Total Chapters",
+            "type": "integer"
+          },
+          "weak_subtopics": {
+            "items": {
+              "$ref": "#/components/schemas/WeakSubtopicItem"
+            },
+            "title": "Weak Subtopics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_id"
+        ],
+        "title": "CourseMasteryResponse",
         "type": "object"
       },
       "CourseResponse": {
@@ -409,6 +535,34 @@
         "title": "DocumentUploadResponse",
         "type": "object"
       },
+      "FormulaItem": {
+        "properties": {
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "latex": {
+            "title": "Latex",
+            "type": "string"
+          },
+          "op_id": {
+            "default": "",
+            "title": "Op Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "default": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "latex"
+        ],
+        "title": "FormulaItem",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -505,6 +659,39 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "MisconceptionItem": {
+        "properties": {
+          "clarification": {
+            "title": "Clarification",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "subtopic_path": {
+            "default": "",
+            "title": "Subtopic Path",
+            "type": "string"
+          },
+          "subtopic_title": {
+            "default": "",
+            "title": "Subtopic Title",
+            "type": "string"
+          },
+          "turn_id": {
+            "default": 0,
+            "title": "Turn Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question",
+          "clarification"
+        ],
+        "title": "MisconceptionItem",
         "type": "object"
       },
       "PlayoutPauseEvent": {
@@ -672,6 +859,43 @@
         "title": "SessionEventResponse",
         "type": "object"
       },
+      "SessionReplayResponse": {
+        "properties": {
+          "active_chapter_path": {
+            "title": "Active Chapter Path",
+            "type": "string"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/SessionEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total_events": {
+            "default": 0,
+            "title": "Total Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "course_id",
+          "active_chapter_path"
+        ],
+        "title": "SessionReplayResponse",
+        "type": "object"
+      },
       "SessionResponse": {
         "properties": {
           "active_chapter_path": {
@@ -729,6 +953,11 @@
             },
             "title": "Resume Stack",
             "type": "array"
+          },
+          "snapshot": {
+            "additionalProperties": true,
+            "title": "Snapshot",
+            "type": "object"
           },
           "updated_at": {
             "format": "date-time",
@@ -1083,6 +1312,34 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WeakSubtopicItem": {
+        "properties": {
+          "interrupt_count": {
+            "default": 0,
+            "title": "Interrupt Count",
+            "type": "integer"
+          },
+          "misconception_count": {
+            "default": 0,
+            "title": "Misconception Count",
+            "type": "integer"
+          },
+          "subtopic_path": {
+            "title": "Subtopic Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subtopic_path",
+          "title"
+        ],
+        "title": "WeakSubtopicItem",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1365,6 +1622,55 @@
         ]
       }
     },
+    "/courses/{course_id}/mastery": {
+      "get": {
+        "description": "Get read-only course mastery stats and weak subtopic rankings.",
+        "operationId": "get_course_mastery_endpoint_courses__course_id__mastery_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseMasteryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Course Mastery Endpoint",
+        "tags": [
+          "courses"
+        ]
+      }
+    },
     "/courses/{course_id}/sessions": {
       "post": {
         "operationId": "create_course_session_courses__course_id__sessions_post",
@@ -1563,6 +1869,168 @@
         "summary": "Health"
       }
     },
+    "/sessions/{session_id}": {
+      "get": {
+        "description": "Fetch session with turn-boundary snapshot for reload recovery.",
+        "operationId": "get_session_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/cheat-sheet": {
+      "get": {
+        "description": "Generate or export a Markdown cheat sheet for the session.",
+        "operationId": "get_session_cheat_sheet_sessions__session_id__cheat_sheet_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "pattern": "^(json|markdown|md)$",
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheatSheetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Session Cheat Sheet",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/events": {
+      "get": {
+        "description": "Fetch all session events ordered by turn and creation time.",
+        "operationId": "get_session_events_sessions__session_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionEventResponse"
+                  },
+                  "title": "Response Get Session Events Sessions  Session Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Session Events",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
     "/sessions/{session_id}/livekit-token": {
       "post": {
         "description": "Mint a LiveKit room token bound to a verified tutor session.",
@@ -1607,6 +2075,55 @@
           }
         ],
         "summary": "Get Livekit Token",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/sessions/{session_id}/replay": {
+      "get": {
+        "description": "Get replay bundle with all chronological events for timeline scrubbing.",
+        "operationId": "get_session_replay_sessions__session_id__replay_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Session Replay",
         "tags": [
           "sessions"
         ]

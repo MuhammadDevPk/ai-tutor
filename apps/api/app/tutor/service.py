@@ -97,12 +97,23 @@ class TutorService:
                     )
 
             # 3. Insert tutor_sessions row
+            initial_snapshot: dict[str, Any] = {
+                "active_slide_index": 0,
+                "active_slide_ops": [],
+                "slides": [],
+                "active_chapter_path": chapter_path,
+                "current_node_path": node_path,
+                "fsm_state": TutorState.ONBOARDING.value,
+                "active_turn_id": 0,
+                "subtopic_cursor": node_path,
+            }
             insert_query = (
                 "INSERT INTO tutor_sessions "
-                "(id, course_id, active_chapter_path, current_node_path, fsm_state, "
-                " active_turn_id, preferences, resume_stack, board_snapshot, fsm_data) "
+                "(id, course_id, active_chapter_path, current_node_path, "
+                " fsm_state, active_turn_id, preferences, resume_stack, "
+                " board_snapshot, fsm_data, snapshot) "
                 "VALUES (%s, %s, %s::ltree, %s::ltree, %s, %s, "
-                "        %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb) "
+                "        %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb) "
                 "RETURNING created_at, updated_at;"
             )
             params = (
@@ -114,8 +125,9 @@ class TutorService:
                 0,
                 json.dumps({}),
                 json.dumps([]),
+                json.dumps(initial_snapshot),
                 json.dumps({}),
-                json.dumps({}),
+                json.dumps(initial_snapshot),
             )
             async with conn.cursor() as cur:
                 await cur.execute(insert_query, params)
@@ -147,8 +159,9 @@ class TutorService:
                 active_turn_id=0,
                 preferences={},
                 resume_stack=[],
-                board_snapshot={},
+                board_snapshot=initial_snapshot,
                 fsm_data={},
+                snapshot=initial_snapshot,
                 created_at=created_at,
                 updated_at=updated_at,
             )

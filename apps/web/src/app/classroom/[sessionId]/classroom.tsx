@@ -497,9 +497,9 @@ export default function ClassroomAudioShell({
           </div>
         )}
 
-        <div className="flex flex-1 flex-col lg:flex-row gap-4 h-[calc(100vh-100px)]">
+        <div className="flex flex-none flex-col lg:flex-row gap-4 h-[calc(100vh-100px)] min-h-0">
           {/* Main Excalidraw Whiteboard Workspace */}
-          <div className="flex-1 flex flex-col min-h-[500px]">
+          <div className="flex-1 flex flex-col min-h-[500px] min-w-0">
             <BoardWorkspace
               operations={boardOperations}
               onBoardSelection={handleBoardSelection}

@@ -215,6 +215,37 @@ const AvatarStage = forwardRef<AvatarStageHandle, AvatarStageProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Load-settle renderer sync. The canvas mount node is display:none until
+    // the model loads, so TalkingHead constructs its WebGL renderer at 0x0,
+    // and its internal ResizeObserver is disconnected by design (Invariant 5:
+    // setSize only at settle points). The FLIP initial-settle fires before the
+    // model exists, so without this sync the canvas stays 0x0 forever and the
+    // loaded avatar is invisible. Once the mount node becomes visible
+    // (modelLoaded), size the renderer to it exactly once.
+    useEffect(() => {
+      if (!modelLoaded) return;
+      const head = headRef.current;
+      const mount = canvasMountRef.current;
+      if (!head || !mount) return;
+      const w = mount.clientWidth;
+      const h = mount.clientHeight;
+      if (w === 0 || h === 0) return;
+      try {
+        const cam = head.camera as
+          | (import("three").PerspectiveCamera)
+          | null;
+        if (cam && typeof cam.updateProjectionMatrix === "function") {
+          cam.aspect = w / h;
+          cam.updateProjectionMatrix();
+        }
+        head.renderer?.setSize(w, h);
+        head.setView(effectiveLayout === "PIP_WHITEBOARD" ? "head" : "mid");
+      } catch {
+        // renderer may be disposed or loading
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [modelLoaded]);
+
     const isPip = effectiveLayout === "PIP_WHITEBOARD";
 
     return (

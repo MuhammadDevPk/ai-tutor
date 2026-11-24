@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DocumentChunk, Session, SyllabusNode, SyllabusTree } from "@/lib/api-client";
 
@@ -216,6 +217,12 @@ export default function SyllabusInspector({ courseId }: { courseId: string }) {
           </span>
           <h1 className="text-lg font-bold text-zinc-900">Syllabus Inspector</h1>
           <span className="text-xs text-zinc-500 font-mono">Course: {courseId}</span>
+          <Link
+            href={`/courses/${courseId}`}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50/60 px-2 py-1 rounded transition-colors"
+          >
+            📊 Mastery Dashboard
+          </Link>
         </div>
 
         <div className="flex items-center gap-3">

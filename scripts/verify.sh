@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT_DIR"
 
@@ -86,7 +88,7 @@ if [ -f "apps/api/pyproject.toml" ]; then
   run_step "Python lint (ruff)" bash -c "cd apps/api && uv run ruff check ."
   run_step "Python types (mypy)" bash -c "cd apps/api && uv run mypy ."
   if [ "$MODE" = "--full" ]; then
-    run_step "Python full test suite (pytest)" bash -c "cd apps/api && uv run pytest -q --tb=short"
+    run_step "Python full test suite (pytest)" bash -c "cd apps/api && uv run pytest -q -m 'not slow' --tb=short"
   else
     run_pytest_fast() {
       local status=0

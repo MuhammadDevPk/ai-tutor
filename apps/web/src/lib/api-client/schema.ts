@@ -74,6 +74,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/mastery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Course Mastery Endpoint
+         * @description Get read-only course mastery stats and weak subtopic rankings.
+         */
+        get: operations["get_course_mastery_endpoint_courses__course_id__mastery_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/sessions": {
         parameters: {
             query?: never;
@@ -142,6 +162,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session
+         * @description Fetch session with turn-boundary snapshot for reload recovery.
+         */
+        get: operations["get_session_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/cheat-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Cheat Sheet
+         * @description Generate or export a Markdown cheat sheet for the session.
+         */
+        get: operations["get_session_cheat_sheet_sessions__session_id__cheat_sheet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Events
+         * @description Fetch all session events ordered by turn and creation time.
+         */
+        get: operations["get_session_events_sessions__session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/{session_id}/livekit-token": {
         parameters: {
             query?: never;
@@ -156,6 +236,26 @@ export interface paths {
          * @description Mint a LiveKit room token bound to a verified tutor session.
          */
         post: operations["get_livekit_token_sessions__session_id__livekit_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Replay
+         * @description Get replay bundle with all chronological events for timeline scrubbing.
+         */
+        get: operations["get_session_replay_sessions__session_id__replay_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -274,6 +374,52 @@ export interface components {
             /** File */
             file: string;
         };
+        /** ChapterMasteryItem */
+        ChapterMasteryItem: {
+            /** Chapter Path */
+            chapter_path: string;
+            /**
+             * Interrupt Qa Count
+             * @default 0
+             */
+            interrupt_qa_count: number;
+            /**
+             * Sessions Count
+             * @default 0
+             */
+            sessions_count: number;
+            /**
+             * Status
+             * @description 'completed', 'in_progress', or 'not_started'
+             * @default not_started
+             */
+            status: string;
+            /** Title */
+            title: string;
+        };
+        /** CheatSheetResponse */
+        CheatSheetResponse: {
+            /** Chapter Path */
+            chapter_path: string;
+            /** Chapter Title */
+            chapter_title: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Formulas */
+            formulas?: components["schemas"]["FormulaItem"][];
+            /** Markdown */
+            markdown: string;
+            /** Misconceptions */
+            misconceptions?: components["schemas"]["MisconceptionItem"][];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
         /** CourseCreate */
         CourseCreate: {
             /**
@@ -300,6 +446,33 @@ export interface components {
             items: components["schemas"]["CourseResponse"][];
             /** Total */
             total: number;
+        };
+        /** CourseMasteryResponse */
+        CourseMasteryResponse: {
+            /** Chapters */
+            chapters?: components["schemas"]["ChapterMasteryItem"][];
+            /**
+             * Completed Chapters
+             * @default 0
+             */
+            completed_chapters: number;
+            /**
+             * Completion Percentage
+             * @default 0
+             */
+            completion_percentage: number;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Total Chapters
+             * @default 0
+             */
+            total_chapters: number;
+            /** Weak Subtopics */
+            weak_subtopics?: components["schemas"]["WeakSubtopicItem"][];
         };
         /** CourseResponse */
         CourseResponse: {
@@ -398,6 +571,26 @@ export interface components {
             /** Vision Flagged Pages */
             vision_flagged_pages: number;
         };
+        /** FormulaItem */
+        FormulaItem: {
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Latex */
+            latex: string;
+            /**
+             * Op Id
+             * @default
+             */
+            op_id: string;
+            /**
+             * Turn Id
+             * @default 0
+             */
+            turn_id: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -451,6 +644,28 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** MisconceptionItem */
+        MisconceptionItem: {
+            /** Clarification */
+            clarification: string;
+            /** Question */
+            question: string;
+            /**
+             * Subtopic Path
+             * @default
+             */
+            subtopic_path: string;
+            /**
+             * Subtopic Title
+             * @default
+             */
+            subtopic_title: string;
+            /**
+             * Turn Id
+             * @default 0
+             */
+            turn_id: number;
         };
         /** PlayoutPauseEvent */
         PlayoutPauseEvent: {
@@ -552,6 +767,28 @@ export interface components {
             /** Turn Id */
             turn_id: number;
         };
+        /** SessionReplayResponse */
+        SessionReplayResponse: {
+            /** Active Chapter Path */
+            active_chapter_path: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Events */
+            events?: components["schemas"]["SessionEventResponse"][];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Total Events
+             * @default 0
+             */
+            total_events: number;
+        };
         /** SessionResponse */
         SessionResponse: {
             /** Active Chapter Path */
@@ -599,6 +836,10 @@ export interface components {
             resume_stack?: {
                 [key: string]: unknown;
             }[];
+            /** Snapshot */
+            snapshot?: {
+                [key: string]: unknown;
+            };
             /**
              * Updated At
              * Format: date-time
@@ -767,6 +1008,23 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WeakSubtopicItem */
+        WeakSubtopicItem: {
+            /**
+             * Interrupt Count
+             * @default 0
+             */
+            interrupt_count: number;
+            /**
+             * Misconception Count
+             * @default 0
+             */
+            misconception_count: number;
+            /** Subtopic Path */
+            subtopic_path: string;
+            /** Title */
+            title: string;
         };
     };
     responses: never;
@@ -962,6 +1220,37 @@ export interface operations {
             };
         };
     };
+    get_course_mastery_endpoint_courses__course_id__mastery_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseMasteryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_course_session_courses__course_id__sessions_post: {
         parameters: {
             query?: never;
@@ -1084,6 +1373,101 @@ export interface operations {
             };
         };
     };
+    get_session_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_cheat_sheet_sessions__session_id__cheat_sheet_get: {
+        parameters: {
+            query?: {
+                format?: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheatSheetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_events_sessions__session_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionEventResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_livekit_token_sessions__session_id__livekit_token_post: {
         parameters: {
             query?: never;
@@ -1102,6 +1486,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LiveKitTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_replay_sessions__session_id__replay_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionReplayResponse"];
                 };
             };
             /** @description Validation Error */

@@ -38,3 +38,12 @@ export type Session = Schemas["SessionResponse"];
 export type SessionEvent = Schemas["SessionEventResponse"];
 export type LiveKitTokenResponse = Schemas["LiveKitTokenResponse"];
 export type CreateCourseSessionRequest = Schemas["CreateCourseSessionRequest"];
+
+export type CheatSheetResponse = Schemas["CheatSheetResponse"];
+export type FormulaItem = Schemas["FormulaItem"];
+export type MisconceptionItem = Schemas["MisconceptionItem"];
+export type CourseMasteryResponse = Schemas["CourseMasteryResponse"];
+export type ChapterMasteryItem = Schemas["ChapterMasteryItem"];
+export type WeakSubtopicItem = Schemas["WeakSubtopicItem"];
+export type SessionReplayResponse = Schemas["SessionReplayResponse"];
+

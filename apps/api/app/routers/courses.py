@@ -15,6 +15,7 @@ from fastapi import (
 from app.auth import get_current_user
 from app.db.connection import get_db_connection
 from app.db.ltree_repository import ScopedLtreeRepository, sanitize_ltree_path
+from app.exports.mastery import get_course_mastery
 from app.ingestion.embeddings import BaseEmbedder, FastEmbedder
 from app.ingestion.gemini_client import GeminiClient, get_gemini_client
 from app.ingestion.service import IngestionService
@@ -29,6 +30,7 @@ from app.schemas.document import (
     DocumentUploadResponse,
 )
 from app.schemas.session import (
+    CourseMasteryResponse,
     CreateCourseSessionRequest,
     SessionResponse,
 )
@@ -298,3 +300,19 @@ async def create_course_session(
     )
     await conn.commit()
     return SessionResponse.model_validate(session)
+
+
+@router.get(
+    "/{course_id}/mastery",
+    response_model=CourseMasteryResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_course_mastery_endpoint(
+    course_id: UUID,
+    current_user: UUID = Depends(get_current_user),
+    conn: psycopg.AsyncConnection[Any] = Depends(get_db_connection),
+) -> CourseMasteryResponse:
+    """Get read-only course mastery stats and weak subtopic rankings."""
+    await _verify_course_owner(course_id, current_user, conn)
+    return await get_course_mastery(conn, course_id)
+

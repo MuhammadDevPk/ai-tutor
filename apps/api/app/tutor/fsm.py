@@ -74,6 +74,7 @@ class TutorSession:
     resume_stack: list[dict[str, Any]] = field(default_factory=list)
     board_snapshot: dict[str, Any] = field(default_factory=dict)
     fsm_data: dict[str, Any] = field(default_factory=dict)
+    snapshot: dict[str, Any] = field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -117,7 +118,12 @@ def _semantic_board_summary(board_snapshot: dict[str, Any]) -> str:
     parts: list[str] = []
 
     # Extract from canonical BoardOp arrays if present
-    ops = board_snapshot.get("operations") or board_snapshot.get("ops") or []
+    ops = (
+        board_snapshot.get("active_slide_ops")
+        or board_snapshot.get("operations")
+        or board_snapshot.get("ops")
+        or []
+    )
     for op in ops:
         if not isinstance(op, dict):
             continue
@@ -210,7 +216,7 @@ class PedagogicalFSM:
             "SELECT id, course_id, active_chapter_path::text, "
             "current_node_path::text, fsm_state, active_turn_id, "
             "preferences, resume_stack, board_snapshot, fsm_data, "
-            "created_at, updated_at FROM tutor_sessions WHERE id = %s;"
+            "snapshot, created_at, updated_at FROM tutor_sessions WHERE id = %s;"
         )
         async with conn.cursor() as cur:
             await cur.execute(query, (str(session_id),))
@@ -220,6 +226,8 @@ class PedagogicalFSM:
 
             # Extract fields whether dict_row or tuple
             if isinstance(row, dict):
+                snap = row.get("snapshot") or row.get("board_snapshot") or {}
+                board_snap = row.get("board_snapshot") or snap
                 return TutorSession(
                     id=UUID(str(row["id"])),
                     course_id=UUID(str(row["course_id"])),
@@ -229,12 +237,17 @@ class PedagogicalFSM:
                     active_turn_id=row["active_turn_id"],
                     preferences=row.get("preferences") or {},
                     resume_stack=row.get("resume_stack") or [],
-                    board_snapshot=row.get("board_snapshot") or {},
+                    board_snapshot=board_snap,
                     fsm_data=row.get("fsm_data") or {},
+                    snapshot=snap,
                     created_at=row.get("created_at"),
                     updated_at=row.get("updated_at"),
                 )
             else:
+                board_snap = row[8] or {}
+                snap = (row[10] if len(row) > 12 else None) or board_snap
+                created_at = row[11] if len(row) > 12 else row[10]
+                updated_at = row[12] if len(row) > 12 else row[11]
                 return TutorSession(
                     id=UUID(str(row[0])),
                     course_id=UUID(str(row[1])),
@@ -244,14 +257,16 @@ class PedagogicalFSM:
                     active_turn_id=row[5],
                     preferences=row[6] or {},
                     resume_stack=row[7] or [],
-                    board_snapshot=row[8] or {},
+                    board_snapshot=board_snap,
                     fsm_data=row[9] or {},
-                    created_at=row[10],
-                    updated_at=row[11],
+                    snapshot=snap,
+                    created_at=created_at,
+                    updated_at=updated_at,
                 )
 
     async def save_session(self, conn: Any, session: TutorSession) -> None:
         """Persist current state and resume_stack into tutor_sessions."""
+        snap = session.snapshot or session.board_snapshot
         query = (
             "UPDATE tutor_sessions "
             "SET fsm_state = %s, "
@@ -262,6 +277,7 @@ class PedagogicalFSM:
             "    resume_stack = %s::jsonb, "
             "    board_snapshot = %s::jsonb, "
             "    fsm_data = %s::jsonb, "
+            "    snapshot = %s::jsonb, "
             "    updated_at = now() "
             "WHERE id = %s;"
         )
@@ -274,6 +290,7 @@ class PedagogicalFSM:
             json.dumps(session.resume_stack),
             json.dumps(session.board_snapshot),
             json.dumps(session.fsm_data),
+            json.dumps(snap),
             str(session.id),
         )
         async with conn.cursor() as cur:
@@ -415,7 +432,12 @@ class PedagogicalFSM:
         session: TutorSession,
         student_text: str | None = None,
     ) -> AsyncIterator[ParsedEvent | StateEvent]:
-        """Dispatch turn processing based on current FSM state."""
+        """Dispatch turn processing with turn-boundary snapshot persistence."""
+        snap = session.snapshot or session.board_snapshot or {}
+        active_slide_ops: list[dict[str, Any]] = list(snap.get("active_slide_ops", []))
+        slides: list[dict[str, Any]] = list(snap.get("slides", []))
+        active_slide_index: int = int(snap.get("active_slide_index", len(slides)))
+
         # Log student input if present
         if student_text:
             await self.log_event(
@@ -426,25 +448,85 @@ class PedagogicalFSM:
                 {"text": student_text},
             )
 
-        if session.fsm_state == TutorState.ONBOARDING.value:
-            async for ev in self._handle_onboarding(conn, session, student_text):
-                yield ev
+        async def _run_turn() -> AsyncIterator[ParsedEvent | StateEvent]:
+            if session.fsm_state == TutorState.ONBOARDING.value:
+                async for ev in self._handle_onboarding(conn, session, student_text):
+                    yield ev
+            elif session.fsm_state == TutorState.TEACH_STEP.value:
+                async for ev in self._handle_teach_step(conn, session, student_text):
+                    yield ev
+            elif session.fsm_state == TutorState.MICRO_CHECK.value:
+                async for ev in self._handle_micro_check(conn, session, student_text):
+                    yield ev
+            elif session.fsm_state == TutorState.INTERRUPT_QA.value:
+                async for ev in self._handle_interrupt_qa(conn, session, student_text):
+                    yield ev
+            elif session.fsm_state == TutorState.RECAP.value:
+                async for ev in self._handle_recap(conn, session, student_text):
+                    yield ev
 
-        elif session.fsm_state == TutorState.TEACH_STEP.value:
-            async for ev in self._handle_teach_step(conn, session, student_text):
-                yield ev
+        async for ev in _run_turn():
+            if isinstance(ev, LatexEvent):
+                op = {
+                    "op_id": f"op_{session.active_turn_id}_{len(active_slide_ops) + 1}",
+                    "op_type": "latex",
+                    "playout_offset_ms": 0,
+                    "payload": {
+                        "latex": ev.latex,
+                        "raw": ev.latex,
+                        "label": f"Formula {len(active_slide_ops) + 1}",
+                    },
+                    "placement": {"zone": "derivation"},
+                }
+                active_slide_ops.append(op)
+            elif isinstance(ev, PlotEvent):
+                op = {
+                    "op_id": f"op_{session.active_turn_id}_{len(active_slide_ops) + 1}",
+                    "op_type": "plot",
+                    "playout_offset_ms": 0,
+                    "payload": {
+                        "spec": ev.spec,
+                        "label": f"Plot {len(active_slide_ops) + 1}",
+                    },
+                    "placement": {"zone": "visual"},
+                }
+                active_slide_ops.append(op)
+            elif isinstance(ev, DiagramEvent):
+                op = {
+                    "op_id": f"op_{session.active_turn_id}_{len(active_slide_ops) + 1}",
+                    "op_type": "diagram",
+                    "playout_offset_ms": 0,
+                    "payload": {
+                        "spec": ev.spec,
+                        "label": f"Diagram {len(active_slide_ops) + 1}",
+                    },
+                    "placement": {"zone": "visual"},
+                }
+                active_slide_ops.append(op)
+            elif isinstance(ev, ClearEvent):
+                slides.append({
+                    "slide_number": len(slides) + 1,
+                    "ops": list(active_slide_ops),
+                })
+                active_slide_ops.clear()
+                active_slide_index = len(slides)
 
-        elif session.fsm_state == TutorState.MICRO_CHECK.value:
-            async for ev in self._handle_micro_check(conn, session, student_text):
-                yield ev
+            yield ev
 
-        elif session.fsm_state == TutorState.INTERRUPT_QA.value:
-            async for ev in self._handle_interrupt_qa(conn, session, student_text):
-                yield ev
-
-        elif session.fsm_state == TutorState.RECAP.value:
-            async for ev in self._handle_recap(conn, session, student_text):
-                yield ev
+        # AT TURN BOUNDARY: Save compact snapshot after turn finishes
+        compact_snapshot = {
+            "active_slide_index": active_slide_index,
+            "active_slide_ops": active_slide_ops,
+            "slides": slides,
+            "active_chapter_path": session.active_chapter_path,
+            "current_node_path": session.current_node_path,
+            "fsm_state": session.fsm_state,
+            "active_turn_id": session.active_turn_id,
+            "subtopic_cursor": session.current_node_path,
+        }
+        session.snapshot = compact_snapshot
+        session.board_snapshot = compact_snapshot
+        await self.save_session(conn, session)
 
     async def _handle_onboarding(
         self,
@@ -552,11 +634,13 @@ class PedagogicalFSM:
         paused_subpoint = (
             session.fsm_data.get("active_subpoint_name") or session.current_node_path
         )
-        stack_frame = {
+        stack_frame: dict[str, Any] = {
             "node_path": session.current_node_path,
             "subpoint_name": paused_subpoint,
             "pending_items": pending_items,
             "turn_id": session.active_turn_id,
+            "question": student_text,
+            "clarifications": [],
         }
         session.resume_stack.append(stack_frame)
 
@@ -570,6 +654,10 @@ class PedagogicalFSM:
 
         # Answer question using scoped RAG for active_chapter_path
         async for ev in self._answer_question_scoped(conn, session, student_text):
+            if isinstance(ev, SayEvent) and session.resume_stack:
+                session.resume_stack[-1].setdefault("clarifications", []).append(
+                    ev.text
+                )
             yield ev
 
     async def _handle_interrupt_qa(
@@ -634,6 +722,28 @@ class PedagogicalFSM:
             paused_subpoint = frame.get("subpoint_name", "our lesson")
             pending_items = frame.get("pending_items", [])
             paused_node = frame.get("node_path", session.current_node_path)
+            q_text = str(frame.get("question", "")).strip()
+            clarifications_list = frame.get("clarifications", [])
+            clarification_text = " ".join(clarifications_list).strip()
+
+            clarification_msg = (
+                clarification_text
+                or "Cleared during interactive Q&A discussion."
+            )
+            # Record cleared misconception in session_events
+            await self.log_event(
+                conn,
+                session.id,
+                session.active_turn_id,
+                "MISCONCEPTION_CLEARED",
+                {
+                    "question": q_text or "Concept clarification during interrupt",
+                    "clarification": clarification_msg,
+                    "subtopic_path": paused_node,
+                    "subpoint_name": paused_subpoint,
+                    "turn_id": session.active_turn_id,
+                },
+            )
 
             bridging_ev = SayEvent(
                 text=f"Great! Let's return to where we left off on {paused_subpoint}."
@@ -689,7 +799,13 @@ class PedagogicalFSM:
             return
 
         # Follow-up question: answer with scoped RAG
+        if session.resume_stack:
+            session.resume_stack[-1].setdefault("clarifications", [])
         async for ev in self._answer_question_scoped(conn, session, student_text):
+            if isinstance(ev, SayEvent) and session.resume_stack:
+                session.resume_stack[-1].setdefault("clarifications", []).append(
+                    ev.text
+                )
             yield ev
 
     async def _handle_micro_check(

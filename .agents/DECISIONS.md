@@ -71,3 +71,46 @@ Three defects found by the operator while filming Malik's subject demos; fixed d
 (2) AVATAR ASSET: default model is now the MPFB/MakeHuman avatar from the TalkingHead examples (CC0, computer-generated, no real person, commercial use allowed), Meshopt-compressed 36.8 MB -> 2.8 MB with all 66 morph targets (ARKit + visemes) preserved, at apps/web/public/models/avatar.glb. Swappable at any time via NEXT_PUBLIC_AVATAR_MODEL_URL or by replacing the file. Malik chose this option ("For now go with A", 2026-11-23) after photos of a real person were declined as an avatar source.
 (3) AVATAR INVISIBLE DESPITE LOADING: the canvas mount node is display:none until the model loads, so TalkingHead constructed its WebGL renderer at 0x0; its ResizeObserver is disconnected by design (Invariant 5) and the FLIP initial settle fires before the model exists, so nothing ever resized the renderer. Fix: a load-settle effect in AvatarStage.tsx sizes the renderer, camera aspect and view exactly once when modelLoaded flips true (a settle point, consistent with Invariant 5). Verified by the operator in headless Chromium: canvas 0x0 -> 1280x800, teacher visible in a recorded frame (screenshot kept in ~/workspace/ai-tutor-prompts/avatar-visible-verified.png).
 (4) TTS DEFAULT VOICE (found 2026-11-24 while generating demo narration): KokoroTTS defaulted to voice "af_heart", which does NOT exist in the v0_19 voices.bin the model path points at (voices present: af, af_bella, af_nicole, af_sarah, af_sky, am_adam, am_michael, bf_emma, bf_isabella, bm_george, bm_lewis) — the first real TTS call would have raised ValueError. Default changed to "af_sarah", which exists in both the v0_19 and v1.0 voice sets. Verified by listing voices from the actual model files and by synthesizing the demo lessons with the app's own KokoroTTS class.
+
+## Phase 9 — grill + operator sign-off (2026-11-24)
+Grill decisions (operator sign-off under Malik's autonomy order, 2026-11-23):
+1. SNAPSHOT FORMAT: canonical BoardOp payloads only. tutor_sessions gains a compact snapshot (active slide BoardOps + slide strip refs + FSM cursor); session_events stays the append-only source of truth. Never store repeated SVG blobs in JSONB; SVGs regenerate on hydration. (Per spec required behavior.)
+2. EXPORT: cheat sheet is generated as Markdown by the API; PDF comes from a print-friendly web view (browser print), zero new server dependencies, keeping the $0 architecture. WebM export stays client-side MediaRecorder per spec.
+3. REPLAY: event-sourced. The replayer rebuilds board state by applying session_events in order up to the scrub point on the real Excalidraw board; no server-side video rendering (architecture invariant).
+4. MASTERY DASHBOARD: read-only aggregation over session_events (chapter completion %, weak subtopics = most INTERRUPT_QA loops per subtopic). No new tables; a query + endpoint + a dashboard section on the course page.
+5. SCHEMA: first check what Phase 1-8 already created; add ONE migration (005) only for what is missing (snapshot columns / indexes). apps/api remains sole DB owner.
+Core-module note: Phase 9 has no new STOP-FOR-TEST-REVIEW module (the 5 core modules are unchanged); tests still come first for the snapshot/restore round-trip and the replay event application, with adversarial cases (refresh mid-turn, empty session, replay past an INTERRUPT_QA loop).
+
+### Phase 9 Implementation & Verification Summary (2026-11-24)
+- **Alembic Migration 005:** (`apps/api/alembic/versions/005_phase9_persistence_and_mastery.py`):
+  - Added `snapshot JSONB NOT NULL DEFAULT '{}'::jsonb` to `tutor_sessions`.
+  - Added performance indexes: `idx_session_events_event_type`, `idx_session_events_session_event_type`, `idx_tutor_sessions_course_fsm`.
+  - Upgraded database cleanly via `uv run alembic upgrade head`.
+- **Turn-Boundary Snapshot Persistence:**
+  - In `apps/api/app/tutor/fsm.py`: FSM snapshots are persisted to `tutor_sessions.snapshot` strictly at the conclusion of clean turns in `handle_turn`. Partial turns, unexpected crashes, or mid-turn page refreshes do not write partial state, ensuring reload recovery returns to the last stable subtopic without duplicate steps.
+  - Snapshot payload contains: `active_slide_ops` (canonical BoardOps), `slides` (archived slide strip references), `active_chapter_path` (ltree node lock), `fsm_state`, `subtopic_cursor`, and `active_slide_index`.
+  - Invariant: SVG blobs are NEVER persisted in Postgres JSONB. Payloads remain canonical (<2KB total per snapshot), keeping storage footprint minimal ($0 architecture).
+- **Reload Recovery Flow:**
+  - In `apps/web/src/app/classroom/[sessionId]/classroom.tsx`: On mount, fetches the session's turn-boundary snapshot.
+  - In `apps/web/src/components/classroom/BoardWorkspace.tsx`: Hydrates the Excalidraw board with canonical `initialSnapshot` operations, regenerating SVG data URLs dynamically on hydration via MathJax 3 / function-plot. Slide history strip is restored from archived slide ops.
+- **Event-Sourced Timeline Replayer:**
+  - Route: `apps/web/src/app/classroom/[sessionId]/replay/`.
+  - Implemented pure event-sourcing engine in `apps/web/src/lib/board/replayEngine.ts` (`computeReplayStateAtStep`).
+  - Scrubber allows stepping or playing through `session_events` in sequential order, rebuilding active whiteboard state, slide archives, dialogue transcripts, and active Q&A interrupt notices.
+  - Clicking any formula on the board or in the formula deck copies clean raw LaTeX directly to clipboard.
+  - Included client-side MediaRecorder WebM recording fallback (`canvas.captureStream(30)`) with zero server overhead.
+- **One-Click Study Exporter:**
+  - API endpoint: `GET /sessions/{session_id}/cheat-sheet` (`apps/api/app/exports/cheat_sheet.py`) compiling all canonical board formulas (raw LaTeX) and misconceptions cleared during `INTERRUPT_QA` loops into structured JSON and clean Markdown.
+  - Print-friendly route: `apps/web/src/app/classroom/[sessionId]/export/` (`cheatSheet.tsx`) with `@media print` styling for one-click browser print-to-PDF and one-click `.md` file download.
+- **Course Mastery Dashboard:**
+  - API endpoint: `GET /courses/{course_id}/mastery` (`apps/api/app/exports/mastery.py`) executing read-only aggregation over `session_events`. Calculates completed chapters %, total sessions, and ranks priority review subtopics by `INTERRUPT_QA` loop frequencies.
+  - Mounted on `/courses/[courseId]` and linked directly from the Syllabus Inspector navigation bar.
+- **Verification Gates:**
+  - Tests first: Created `apps/api/tests/test_phase9_persistence.py` with 7 comprehensive test suites covering snapshot save/restore round-trip, adversarial mid-turn refresh, replay event application past INTERRUPT_QA loops, adversarial empty session exports, formula LaTeX accuracy, and mastery rankings.
+  - Full pytest suite: 210 passing tests in 19.66s (0 regressions).
+  - Next.js Turbopack production build: 8/8 routes generated cleanly with zero type errors and zero ESLint errors.
+  - Full verification: `./scripts/verify.sh --full` PASSED across all 9 steps.
+
+## Phase 9 — reviewer outcome + operator note on the slow-test filter (2026-11-24)
+Fresh reviewer (Gemini) found 3 BLOCKERs (mastery double-count of MISCONCEPTION_CLEARED, slide strip dropped on reload recovery, React 19 set-state-in-effect lint failure), 4 SHOULD-FIX and 3 NITs; all fixed, tests strengthened to exact counts, verify.sh --full exit 0, 211 passed + 1 deselected.
+OPERATOR NOTE on the verify.sh change the reviewer made: the --full pytest step now runs -m 'not slow', deselecting the FastEmbed weights-download test. Reason accepted: in proxy-restricted environments the HuggingFace CDN range requests hang for many minutes (measured ~10 min stalls on 2026-11-24), which makes the gate unusable. This is an environment escape, NOT permission to forget the test: the slow embedder test must run wherever the model is downloadable or cached (Phase 10 soak/CI), and a GitHub issue tracks making model-dependent tests offline-safe.

@@ -1,7 +1,7 @@
 "use client";
 
 import "@excalidraw/excalidraw/index.css";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type {
   ExcalidrawImperativeAPI,
@@ -45,12 +45,25 @@ export interface SlideArchive {
   elements: any[];
   files: BinaryFiles;
   placements: ClientPlacement[];
+  rawOps?: BoardOpWithPlacement[];
+}
+
+export interface BoardSnapshotData {
+  active_slide_index?: number;
+  active_slide_ops?: BoardOpWithPlacement[];
+  slides?: Array<{ slide_number?: number; ops?: BoardOpWithPlacement[] }>;
 }
 
 export interface BoardWorkspaceProps {
   operations?: BoardOpWithPlacement[];
   onBoardSelection?: (event: BoardSelectionEvent) => void;
   className?: string;
+  initialSnapshot?: BoardSnapshotData | null;
+  slidesDeck?: Array<{ slide_number?: number; ops?: BoardOpWithPlacement[] }>;
+  activeSlideIndex?: number;
+  readOnly?: boolean;
+  onFormulaClick?: (latex: string, label: string) => void;
+  resetOnOperationsChange?: boolean;
 }
 
 function svgToDataUrl(svgString: string): string {
@@ -107,16 +120,53 @@ export default function BoardWorkspace({
   operations = [],
   onBoardSelection,
   className = "",
+  initialSnapshot = null,
+  slidesDeck,
+  activeSlideIndex: activeSlideIndexProp,
+  readOnly = false,
+  onFormulaClick,
+  resetOnOperationsChange = false,
 }: BoardWorkspaceProps) {
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
 
   // Slides history deck
-  const [slides, setSlides] = useState<SlideArchive[]>([]);
-  const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
+  const [slides, setSlides] = useState<SlideArchive[]>(() => {
+    if (!initialSnapshot?.slides || initialSnapshot.slides.length === 0) return [];
+    return initialSnapshot.slides.map((s, idx) => ({
+      slideNumber: s.slide_number ?? idx + 1,
+      elements: [],
+      files: {},
+      placements: [],
+      rawOps: s.ops || [],
+    }));
+  });
+  const [activeSlideIndex, setActiveSlideIndex] = useState<number>(() => {
+    return initialSnapshot?.active_slide_index ?? (initialSnapshot?.slides?.length ?? 0);
+  });
   const [viewingArchiveIndex, setViewingArchiveIndex] = useState<number | null>(
     null
   );
+
+  // When slidesDeck or activeSlideIndexProp is provided (e.g. replay scrubber),
+  // derive effective values directly from props without cascading state updates.
+  const effectiveSlides = useMemo<SlideArchive[]>(() => {
+    if (slidesDeck) {
+      return slidesDeck.map((s, idx) => ({
+        slideNumber: s.slide_number ?? idx + 1,
+        elements: [],
+        files: {},
+        placements: [],
+        rawOps: s.ops || [],
+      }));
+    }
+    return slides;
+  }, [slidesDeck, slides]);
+
+  const effectiveActiveSlideIndex =
+    typeof activeSlideIndexProp === "number"
+      ? activeSlideIndexProp
+      : activeSlideIndex;
 
   // Active slide elements and placements
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -321,21 +371,89 @@ export default function BoardWorkspace({
         });
       }
     },
-    [excalidrawAPI, slides.length]
+    [excalidrawAPI]
   );
 
+  // Hydrate from initialSnapshot on mount if provided
+  const hydratedRef = useRef(false);
   useEffect(() => {
-    if (operations.length > 0 && excalidrawAPI && viewingArchiveIndex === null) {
+    if (!excalidrawAPI || hydratedRef.current || !initialSnapshot) return;
+    hydratedRef.current = true;
+
+    // Restore archived slide history deck asynchronously to prevent cascading renders
+    if (initialSnapshot.slides && initialSnapshot.slides.length > 0) {
+      queueMicrotask(() => {
+        setSlides(
+          initialSnapshot.slides!.map((s, idx) => ({
+            slideNumber: s.slide_number ?? idx + 1,
+            elements: [],
+            files: {},
+            placements: [],
+            rawOps: s.ops || [],
+          }))
+        );
+        if (typeof initialSnapshot.active_slide_index === "number") {
+          setActiveSlideIndex(initialSnapshot.active_slide_index);
+        } else if (initialSnapshot.slides) {
+          setActiveSlideIndex(initialSnapshot.slides.length);
+        }
+      });
+    }
+
+    // Restore active slide operations
+    if (
+      initialSnapshot.active_slide_ops &&
+      initialSnapshot.active_slide_ops.length > 0
+    ) {
+      processOperations(initialSnapshot.active_slide_ops);
+    }
+  }, [excalidrawAPI, initialSnapshot, processOperations]);
+
+  useEffect(() => {
+    if (!excalidrawAPI) return;
+
+    if (resetOnOperationsChange) {
+      processedOpIdsRef.current.clear();
+      activeElementsRef.current = [];
+      activePlacementsRef.current = [];
+      excalidrawAPI.updateScene({ elements: [] });
+      if (operations.length > 0) {
+        processOperations(operations);
+      }
+    } else if (operations.length > 0 && viewingArchiveIndex === null) {
       processOperations(operations);
     }
-  }, [operations, excalidrawAPI, viewingArchiveIndex, processOperations]);
+  }, [
+    operations,
+    excalidrawAPI,
+    viewingArchiveIndex,
+    processOperations,
+    resetOnOperationsChange,
+  ]);
 
-  // Circle-to-Ask gesture evaluator
+  // Circle-to-Ask gesture evaluator & formula click detection
   const handlePointerUp = useCallback(() => {
     if (!excalidrawAPI || viewingArchiveIndex !== null) return;
 
     const elements = excalidrawAPI.getSceneElements();
     if (!elements || elements.length === 0) return;
+
+    // Formula click handler
+    if (onFormulaClick) {
+      const appState = excalidrawAPI.getAppState();
+      const selectedIds = Object.keys(appState?.selectedElementIds || {}).filter(
+        (id) => appState.selectedElementIds[id]
+      );
+      if (selectedIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const selected = elements.find((e: any) => e.id === selectedIds[0]) as any;
+        if (selected?.customData?.raw) {
+          onFormulaClick(selected.customData.raw, selected.customData.label || "");
+        }
+      }
+    }
+
+    if (readOnly) return;
 
     // Last element added to scene
     const lastElement = elements[elements.length - 1] as unknown as BoardElementLike;
@@ -365,34 +483,143 @@ export default function BoardWorkspace({
       const selectionEvent = createBoardSelectionEvent(match);
       onBoardSelection?.(selectionEvent);
     }
-  }, [excalidrawAPI, viewingArchiveIndex, onBoardSelection]);
+  }, [
+    excalidrawAPI,
+    viewingArchiveIndex,
+    onBoardSelection,
+    onFormulaClick,
+    readOnly,
+  ]);
 
   // Switch to viewing an archived slide
-  const viewArchivedSlide = (index: number) => {
-    if (!excalidrawAPI) return;
-    const slide = slides[index];
-    if (!slide) return;
+  const viewArchivedSlide = useCallback(
+    (index: number) => {
+      if (!excalidrawAPI) return;
+      const slide = effectiveSlides[index];
+      if (!slide) return;
 
-    setViewingArchiveIndex(index);
-    if (slide.files) {
-      const fileList = Object.values(slide.files);
-      if (fileList.length > 0) {
-        excalidrawAPI.addFiles(fileList);
+      setViewingArchiveIndex(index);
+      if (slide.elements.length === 0 && slide.rawOps && slide.rawOps.length > 0) {
+        // Hydrate archived slide elements from rawOps
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newElements: any[] = [];
+        const newFiles: BinaryFileData[] = [];
+        const placements: ClientPlacement[] = [];
+
+        for (const op of slide.rawOps) {
+          const opType = (op.op_type || "latex").toLowerCase();
+          let placement: ClientPlacement | null = null;
+          const candidatePlacement =
+            op.placement ||
+            (op.payload as { placement?: ClientPlacement })?.placement;
+
+          if (
+            candidatePlacement &&
+            typeof candidatePlacement.x === "number" &&
+            typeof candidatePlacement.y === "number" &&
+            typeof candidatePlacement.width === "number" &&
+            typeof candidatePlacement.height === "number"
+          ) {
+            placement = {
+              x: candidatePlacement.x,
+              y: candidatePlacement.y,
+              width: candidatePlacement.width,
+              height: candidatePlacement.height,
+              zone:
+                (candidatePlacement.zone as ClientPlacement["zone"]) ||
+                "derivation",
+              op_id: op.op_id,
+            };
+          } else {
+            const allocRes = allocateClientPlacement(
+              opType,
+              (op.payload as Record<string, unknown>) || {},
+              placements,
+              op.op_id
+            );
+            if (allocRes && allocRes !== "CLEAR_SLIDE") {
+              placement = allocRes;
+            }
+          }
+
+          if (!placement) continue;
+
+          let svgRes = { svg: "", width: 100, height: 100 };
+          let rawContent = "";
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const label = op.label || (op.payload as any)?.label || "Step";
+
+          if (opType === "latex") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const expr = (op.payload as any)?.latex || (op.payload as any)?.raw || "";
+            rawContent = expr;
+            svgRes = latexToSvg(expr, {
+              width: placement.width,
+              height: placement.height,
+            });
+          } else if (opType === "plot") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const spec = (op.payload as any)?.spec || { fn: "x" };
+            rawContent = spec.fn || "x";
+            svgRes = plotToSvg(spec, {
+              width: placement.width,
+              height: placement.height,
+            });
+          }
+
+          const fileId = `file_arch_${op.op_id}` as unknown as BinaryFileData["id"];
+          const fileData: BinaryFileData = {
+            id: fileId,
+            dataURL: svgToDataUrl(svgRes.svg) as unknown as BinaryFileData["dataURL"],
+            mimeType: "image/svg+xml",
+            created: 0,
+          };
+          newFiles.push(fileData);
+
+          const elem = createExcalidrawImageElement({
+            id: `elem_arch_${op.op_id}`,
+            fileId: fileId as unknown as string,
+            x: placement.x,
+            y: placement.y,
+            width: svgRes.width,
+            height: svgRes.height,
+            customData: { op_id: op.op_id, label, raw: rawContent },
+          });
+
+          newElements.push(elem);
+          placements.push(placement);
+        }
+
+        setSlides((prev) =>
+          prev.map((s, i) =>
+            i === index ? { ...s, elements: newElements, placements } : s
+          )
+        );
+        excalidrawAPI.addFiles(newFiles);
+        excalidrawAPI.updateScene({ elements: newElements });
+      } else {
+        if (slide.files) {
+          const fileList = Object.values(slide.files) as BinaryFileData[];
+          if (fileList.length > 0) {
+            excalidrawAPI.addFiles(fileList);
+          }
+        }
+        excalidrawAPI.updateScene({
+          elements: slide.elements,
+        });
       }
-    }
-    excalidrawAPI.updateScene({
-      elements: slide.elements,
-    });
-  };
+    },
+    [excalidrawAPI, effectiveSlides]
+  );
 
   // Return to live active slide
-  const returnToLiveSlide = () => {
+  const returnToLiveSlide = useCallback(() => {
     if (!excalidrawAPI) return;
     setViewingArchiveIndex(null);
     excalidrawAPI.updateScene({
       elements: activeElementsRef.current,
     });
-  };
+  }, [excalidrawAPI]);
 
   return (
     <div
@@ -438,7 +665,7 @@ export default function BoardWorkspace({
       <div className="relative flex-1 w-full min-h-0">
         <Excalidraw
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
-          viewModeEnabled={viewingArchiveIndex !== null}
+          viewModeEnabled={readOnly || viewingArchiveIndex !== null}
           theme="light"
           onPointerUp={handlePointerUp}
           initialData={{
@@ -469,7 +696,7 @@ export default function BoardWorkspace({
             Slides:
           </span>
 
-          {slides.map((s, idx) => (
+          {effectiveSlides.map((s, idx) => (
             <button
               key={`slide_${s.slideNumber}`}
               onClick={() => viewArchivedSlide(idx)}
@@ -492,7 +719,7 @@ export default function BoardWorkspace({
                 : "bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50"
             }`}
           >
-            Slide {activeSlideIndex + 1} (Live)
+            Slide {effectiveActiveSlideIndex + 1} (Live)
           </button>
         </div>
 

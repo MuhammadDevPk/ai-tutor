@@ -17,9 +17,11 @@ import type {
   PlayoutResumeEvent,
   InterruptFlushEvent,
   LayoutOverrideEvent,
+  Session,
 } from "@/lib/api-client";
 import BoardWorkspace, {
   type BoardOpWithPlacement,
+  type BoardSnapshotData,
 } from "@/components/classroom/BoardWorkspace";
 import TelemetryHud, {
   type TelemetryData,
@@ -52,6 +54,10 @@ export default function ClassroomAudioShell({
 
   // Board operations received over LiveKit DataChannel
   const [boardOperations, setBoardOperations] = useState<BoardOpWithPlacement[]>([]);
+
+  // Phase 9: Session reload recovery state
+  const [sessionData, setSessionData] = useState<Session | null>(null);
+  const [restoredSnapshot, setRestoredSnapshot] = useState<BoardSnapshotData | null>(null);
 
   // Phase 8: Layout mode, Avatar Cue, and speaking state
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("AUTO");
@@ -135,6 +141,51 @@ export default function ClassroomAudioShell({
       clock.reset();
     };
   }, []);
+
+  // Phase 9: Restore snapshot from DB upon reload/initial load
+  useEffect(() => {
+    let active = true;
+    const fetchSession = async () => {
+      try {
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const headers: Record<string, string> = token
+          ? { Authorization: `Bearer ${token}` }
+          : {};
+        const res = await fetch(`${apiBase}/sessions/${sessionId}`, { headers });
+        if (!res.ok) return;
+        const data: Session = await res.json();
+        if (!active) return;
+        setSessionData(data);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const snap = (data.snapshot || data.board_snapshot) as any;
+        if (
+          snap &&
+          ((snap.active_slide_ops && snap.active_slide_ops.length > 0) ||
+            (snap.slides && snap.slides.length > 0))
+        ) {
+          setRestoredSnapshot(snap);
+        }
+
+        if (data.active_turn_id) {
+          setTelemetryData((prev) => ({
+            ...prev,
+            turnId: data.active_turn_id,
+          }));
+        }
+      } catch (err) {
+        console.warn("Failed to load session snapshot for reload recovery:", err);
+      }
+    };
+
+    fetchSession();
+    return () => {
+      active = false;
+    };
+  }, [sessionId, apiBase]);
 
   // Circle-to-Ask: publish BOARD_SELECTION event over DataChannel
   const handleBoardSelection = useCallback(async (event: BoardSelectionEvent) => {
@@ -440,6 +491,11 @@ export default function ClassroomAudioShell({
           <span className="text-xs text-zinc-400 font-mono hidden md:inline">
             ID: {sessionId}
           </span>
+          {sessionData?.active_chapter_path && (
+            <span className="text-xs bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded font-mono hidden lg:inline">
+              Chapter: {sessionData.active_chapter_path}
+            </span>
+          )}
         </div>
 
         {/* Phase 8: Layout Pin/Unpin Mode Control */}
@@ -448,9 +504,22 @@ export default function ClassroomAudioShell({
           onChange={handleLayoutChange}
         />
 
-        {/* Connection & Audio Controls */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs font-medium">
+        {/* Phase 9 Replay & Export Quick Access + Audio Controls */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <a
+            href={`/classroom/${sessionId}/replay`}
+            className="px-2.5 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors"
+          >
+            Replay
+          </a>
+          <a
+            href={`/classroom/${sessionId}/export`}
+            className="px-2.5 py-1.5 text-xs font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 rounded-md transition-colors"
+          >
+            Cheat Sheet
+          </a>
+
+          <div className="flex items-center gap-2 text-xs font-medium pl-1">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
                 connectionState === ConnectionState.Connected
@@ -501,8 +570,10 @@ export default function ClassroomAudioShell({
           {/* Main Excalidraw Whiteboard Workspace */}
           <div className="flex-1 flex flex-col min-h-[500px] min-w-0">
             <BoardWorkspace
+              key={restoredSnapshot ? `restored-${sessionId}` : `init-${sessionId}`}
               operations={boardOperations}
               onBoardSelection={handleBoardSelection}
+              initialSnapshot={restoredSnapshot}
               className="h-full"
             />
           </div>

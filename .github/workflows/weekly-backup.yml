@@ -1,0 +1,83 @@
+name: Weekly Supabase Logical Backup
+
+on:
+  schedule:
+    # Run every Sunday at 05:00 UTC
+    - cron: '0 5 * * 0'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Logical Data Export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Export Logical Backup
+        id: run_export
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: |
+          if [ -z "$SUPABASE_DATABASE_URL" ]; then
+            echo "NOTICE: SUPABASE_DATABASE_URL secret is not configured in repository settings."
+            echo "Skipping backup export. Workflow completed with exit code 0."
+            echo "skip_upload=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p backups
+          python -m pip install --quiet --no-cache-dir "psycopg[binary]>=3.1.0"
+          
+          BACKUP_FILE="backups/ai_tutor_backup_$(date -u +'%Y%m%d_%H%M%S').json"
+          
+          python -c "
+          import os, sys, json, datetime, psycopg
+          from psycopg.rows import dict_row
+
+          def json_serial(obj):
+              if isinstance(obj, (datetime.datetime, datetime.date)):
+                  return obj.isoformat()
+              return str(obj)
+
+          url = os.environ['SUPABASE_DATABASE_URL']
+          export_data = {'metadata': {'exported_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}}
+
+          try:
+              with psycopg.connect(url, row_factory=dict_row, connect_timeout=15) as conn:
+                  with conn.cursor() as cur:
+                      # 1. Courses
+                      cur.execute('SELECT id, course_code, title, baseline_skill, created_at, updated_at FROM courses ORDER BY created_at;')
+                      export_data['courses'] = cur.fetchall()
+
+                      # 2. Syllabus Nodes
+                      cur.execute('SELECT id, course_id, path::text AS path, node_type, order_index, title, summary, mastery_status, created_at, updated_at FROM syllabus_nodes ORDER BY course_id, order_index;')
+                      export_data['syllabus_nodes'] = cur.fetchall()
+
+                      # 3. Session Events
+                      cur.execute('SELECT id, session_id, turn_id, event_type, playout_offset_ms, payload, created_at FROM session_events ORDER BY session_id, turn_id, id;')
+                      export_data['session_events'] = cur.fetchall()
+
+              with open('$BACKUP_FILE', 'w', encoding='utf-8') as f:
+                  json.dump(export_data, f, indent=2, default=json_serial)
+
+              print(f'Backup exported successfully to $BACKUP_FILE ({os.path.getsize(\"$BACKUP_FILE\")} bytes)')
+          except Exception as e:
+              print(f'Backup failed: {e}', file=sys.stderr)
+              sys.exit(1)
+          "
+          echo "backup_file=$BACKUP_FILE" >> "$GITHUB_OUTPUT"
+          echo "skip_upload=false" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Backup Artifact
+        if: steps.run_export.outputs.skip_upload == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-tutor-database-backup
+          path: backups/
+          retention-days: 30

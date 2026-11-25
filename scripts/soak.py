@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime, timezone
 import json
 import logging
-from pathlib import Path
 import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -62,7 +62,7 @@ from app.telemetry.metrics import (
     TurnTimer,
 )
 from app.tutor.budget import PromptAssembler
-from app.tutor.fsm import PedagogicalFSM, TutorState
+from app.tutor.fsm import PedagogicalFSM
 from app.tutor.simulate import scripted_llm_response, seed_simulation_course
 
 logging.basicConfig(
@@ -320,36 +320,36 @@ class SoakHarness:
                 f"**{p50:.1f}** | **{p95:.1f}** | {mx:.1f} |\n"
             )
 
-        md_content = f"""# Soak Test Report — AI Video Tutor (Phase 10)
-
-- **Date:** {meta["generated_at"]}
-- **Status:** **{meta["status"]}** (Zero crashes, zero memory leaks, $0 API spend)
-- **Duration:** {meta["duration_minutes"]} minutes ({meta["duration_seconds"]}s)
-
----
-
-## 1. Headline Results
-
-| Metric | Measured Value | Threshold / Target | Status |
-|---|---|---|---|
-| **Total Duration** | {meta["duration_minutes"]} min | ≥ 45.0 min (or configured duration) | PASS |
-| **Turns Completed** | {summ["turns_completed"]} | ≥ 100 turns | PASS |
-| **Turn Failures** | {summ["turns_failed"]} | 0 | PASS |
-| **Memory Start** | {mem["start_mb"]} MB | - | - |
-| **Memory End** | {mem["end_mb"]} MB | - | - |
-| **Memory Delta** | {mem["delta_mb"]:+.2f} MB | Flat / bounded (< 50 MB growth) | PASS |
-| **Peak Memory RSS** | {mem["peak_mb"]} MB | Normal process operating bounds | PASS |
-| **API Spend** | $0.00 | Strict $0 Monorepo Invariant | PASS |
-
----
-
-## 2. Pipeline Stage Latency Benchmarks (P50 / P95)
-
-Spans recorded across all verified turns:
-
-| Stage Name | Samples Count | Min (ms) | Mean (ms) | P50 (ms) | P95 (ms) | Max (ms) |
-|---|---|---|---|---|---|---|
-"""
+        md_content = (
+            "# Soak Test Report — AI Video Tutor (Phase 10)\n\n"
+            f"- **Date:** {meta['generated_at']}\n"
+            f"- **Status:** **{meta['status']}** "
+            "(Zero crashes, zero memory leaks, $0 API spend)\n"
+            f"- **Duration:** {meta['duration_minutes']} minutes "
+            f"({meta['duration_seconds']}s)\n\n"
+            "---\n\n"
+            "## 1. Headline Results\n\n"
+            "| Metric | Measured Value | Threshold / Target | Status |\n"
+            "|---|---|---|---|\n"
+            f"| **Total Duration** | {meta['duration_minutes']} min | "
+            "≥ 45.0 min (or configured duration) | PASS |\n"
+            f"| **Turns Completed** | {summ['turns_completed']} | "
+            "≥ 100 turns | PASS |\n"
+            f"| **Turn Failures** | {summ['turns_failed']} | 0 | PASS |\n"
+            f"| **Memory Start** | {mem['start_mb']} MB | - | - |\n"
+            f"| **Memory End** | {mem['end_mb']} MB | - | - |\n"
+            f"| **Memory Delta** | {mem['delta_mb']:+.2f} MB | "
+            "Flat / bounded (< 50 MB growth) | PASS |\n"
+            f"| **Peak Memory RSS** | {mem['peak_mb']} MB | "
+            "Normal process operating bounds | PASS |\n"
+            "| **API Spend** | $0.00 | Strict $0 Monorepo Invariant | PASS |\n\n"
+            "---\n\n"
+            "## 2. Pipeline Stage Latency Benchmarks (P50 / P95)\n\n"
+            "Spans recorded across all verified turns:\n\n"
+            "| Stage Name | Samples Count | Min (ms) | Mean (ms) | P50 (ms) | "
+            "P95 (ms) | Max (ms) |\n"
+            "|---|---|---|---|---|---|---|\n"
+        )
         md_content += _fmt_row("STT Result Received", STAGE_STT_RESULT)
         md_content += _fmt_row("LLM First Token", STAGE_LLM_FIRST_TOKEN)
         md_content += _fmt_row("TTS First Byte", STAGE_TTS_FIRST_BYTE)
@@ -357,16 +357,14 @@ Spans recorded across all verified turns:
         md_content += _fmt_row("Turn Total Duration", STAGE_TURN_END)
 
         num_checkpoints = len(data.get("memory_samples", []))
-        md_content += f"""
----
-
-## 3. Process Memory Profile Over Time
-
-Memory sampled at {self.sample_interval}s intervals ({num_checkpoints} total checkpoints):
-
-| Elapsed Time | Resident Set Size (RSS) | Memory Delta from Start |
-|---|---|---|
-"""
+        md_content += (
+            "\n---\n\n"
+            "## 3. Process Memory Profile Over Time\n\n"
+            f"Memory sampled at {self.sample_interval}s intervals "
+            f"({num_checkpoints} total checkpoints):\n\n"
+            "| Elapsed Time | Resident Set Size (RSS) | Memory Delta from Start |\n"
+            "|---|---|---|\n"
+        )
         # Include sample intervals (first 10, middle, last 10 if long)
         samples = data.get("memory_samples", [])
         if len(samples) <= 30:
@@ -387,7 +385,8 @@ Memory sampled at {self.sample_interval}s intervals ({num_checkpoints} total che
             "\n---\n\n"
             "## 4. Observations & Verdict\n\n"
             f"- **Stability:** Ran continuously for {meta['duration_minutes']} "
-            "minutes with **zero unhandled exceptions** and **zero process restarts**.\n"
+            "minutes with **zero unhandled exceptions** and "
+            "**zero process restarts**.\n"
             "- **Memory Retention:** Memory delta over the entire duration remained "
             f"flat ({mem['delta_mb']:+.2f} MB delta), confirming zero unbounded array "
             "accumulation, zero database connection leaks, and zero memory leaks.\n"

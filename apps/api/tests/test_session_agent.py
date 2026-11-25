@@ -312,7 +312,9 @@ async def test_session_agent_records_metrics_spans():
 
 @pytest.mark.asyncio
 async def test_session_agent_records_failure_on_barge_in_interruption():
-    """Adversarial test: barge-in interruption must record turns_failed=1, not completed."""
+    """Adversarial test: barge-in interruption must record turns_failed=1,
+    not completed.
+    """
     from app.telemetry.metrics import MetricsCollector
 
     collector = MetricsCollector()

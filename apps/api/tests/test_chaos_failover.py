@@ -428,7 +428,8 @@ async def test_livekit_token_and_session_reconnect_lifecycle():
         assert claims_2["sub"] == str(user_id)
         assert claims_2["video"]["room"] == str(session_id)
 
-        # 4. Assert session state, snapshot, and turn_id survived in DB without regression
+        # 4. Assert session state, snapshot, and turn_id survived in DB
+        # without regression
         owner_check_after = await _verify_session_owner(session_id, user_id, conn)
         assert owner_check_after["id"] == session_id
         assert owner_check_after["active_turn_id"] == 5

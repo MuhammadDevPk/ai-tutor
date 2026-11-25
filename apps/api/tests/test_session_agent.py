@@ -265,3 +265,107 @@ async def test_session_agent_stage_2_interrupt_cancels_and_dispatches_qa():
         await initial_task
     except asyncio.CancelledError:
         pass
+
+
+@pytest.mark.asyncio
+async def test_session_agent_records_metrics_spans():
+    from app.telemetry.metrics import (
+        STAGE_BOARD_OP_EMITTED,
+        STAGE_LLM_FIRST_TOKEN,
+        STAGE_TTS_FIRST_BYTE,
+        STAGE_TURN_END,
+        MetricsCollector,
+    )
+
+    collector = MetricsCollector()
+    collector.reset()
+
+    session_id = uuid4()
+    tutor_service = DummyTutorService()
+    tts = FakeTTS(samples_per_word=1000)
+    stt = FakeSTT()
+
+    agent = SessionAgent(
+        session_id=session_id,
+        tutor_service=tutor_service,  # type: ignore[arg-type]
+        tts=tts,
+        stt=stt,
+        metrics_collector=collector,
+    )
+    await agent.initialize()
+
+    async def sample_turn_stream() -> AsyncIterator[ParsedEvent | StateEvent]:
+        yield SayEvent(text="Explaining calculus derivatives.")
+        yield LatexEvent(latex=r"\frac{df}{dx} = \lim_{h\to 0}\frac{f(x+h)-f(x)}{h}")
+
+    await agent.play_turn_events(sample_turn_stream())
+
+    summary = collector.get_summary()
+    assert summary["turns_completed"] == 1
+    assert summary["turns_failed"] == 0
+
+    assert summary["stages"][STAGE_LLM_FIRST_TOKEN]["count"] >= 1.0
+    assert summary["stages"][STAGE_TTS_FIRST_BYTE]["count"] >= 1.0
+    assert summary["stages"][STAGE_BOARD_OP_EMITTED]["count"] >= 1.0
+    assert summary["stages"][STAGE_TURN_END]["count"] >= 1.0
+
+
+@pytest.mark.asyncio
+async def test_session_agent_records_failure_on_barge_in_interruption():
+    """Adversarial test: barge-in interruption must record turns_failed=1, not completed."""
+    from app.telemetry.metrics import MetricsCollector
+
+    collector = MetricsCollector()
+    collector.reset()
+
+    agent = SessionAgent(
+        session_id=uuid4(),
+        tutor_service=DummyTutorService(),  # type: ignore[arg-type]
+        tts=FakeTTS(samples_per_word=1000),
+        stt=FakeSTT(),
+        metrics_collector=collector,
+    )
+    await agent.initialize()
+
+    async def interrupting_turn_stream() -> AsyncIterator[ParsedEvent | StateEvent]:
+        yield SayEvent(text="Starting a long explanation...")
+        # Simulate barge-in interrupting the agent playout
+        agent.is_playing = False
+        yield SayEvent(text="This should never be synthesized.")
+
+    await agent.play_turn_events(interrupting_turn_stream())
+
+    summary = collector.get_summary()
+    assert summary["turns_completed"] == 0
+    assert summary["turns_failed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_session_agent_records_failure_on_task_cancellation():
+    """Adversarial test: CancelledError mid-turn must record turns_failed=1."""
+    from app.telemetry.metrics import MetricsCollector
+
+    collector = MetricsCollector()
+    collector.reset()
+
+    agent = SessionAgent(
+        session_id=uuid4(),
+        tutor_service=DummyTutorService(),  # type: ignore[arg-type]
+        tts=FakeTTS(samples_per_word=1000),
+        stt=FakeSTT(),
+        metrics_collector=collector,
+    )
+    await agent.initialize()
+
+    async def cancelling_turn_stream() -> AsyncIterator[ParsedEvent | StateEvent]:
+        yield SayEvent(text="First sentence before cancel.")
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await agent.play_turn_events(cancelling_turn_stream())
+
+    summary = collector.get_summary()
+    assert summary["turns_completed"] == 0
+    assert summary["turns_failed"] == 1
+
+

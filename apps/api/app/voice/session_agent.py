@@ -30,6 +30,11 @@ from app.schemas.events import (
     BoardScheduleEvent,
     DataChannelEvent,
 )
+from app.telemetry.metrics import (
+    MetricsCollector,
+    TurnTimer,
+    default_metrics,
+)
 from app.tutor.fsm import StateEvent
 from app.tutor.service import TutorService
 from app.voice.barge_in import BargeInController
@@ -64,6 +69,7 @@ class SessionAgent:
         stt: STTClient,
         data_channel_sink: Callable[[DataChannelEvent], Any] | None = None,
         audio_frame_sink: Callable[[bytes], Any] | None = None,
+        metrics_collector: MetricsCollector | None = None,
     ) -> None:
         self.session_id = session_id
         self.tutor_service = tutor_service
@@ -71,6 +77,9 @@ class SessionAgent:
         self.stt = stt
         self.data_channel_sink = data_channel_sink
         self.audio_frame_sink = audio_frame_sink
+        self.metrics_collector = (
+            metrics_collector if metrics_collector is not None else default_metrics
+        )
 
         self.filler_cache: dict[str, bytes] = {}
         self.is_playing: bool = False
@@ -179,6 +188,11 @@ class SessionAgent:
         self.is_playing = True
         self._playout_paused = False
         turn_id = self.barge_in.active_turn_id
+        timer = TurnTimer(
+            turn_id=turn_id,
+            collector=self.metrics_collector,
+            clock_fn=self.barge_in.clock.time,
+        )
 
         # Phase 7: reset stamper and epoch guard for this turn
         self.stamper.reset(turn_id)
@@ -194,81 +208,98 @@ class SessionAgent:
         first_say = True
         turn_start_s = self.barge_in.clock.time()
 
-        async for ev in event_stream:
-            if not self.is_playing:
-                break
-
-            if isinstance(ev, SayEvent):
-                self.barge_in.unplayed_text.append(ev.text)
-                pcm_bytes = await self.tts.synthesize_sentence(ev.text)
+        try:
+            async for ev in event_stream:
                 if not self.is_playing:
                     break
 
-                # Note: synthesize_sentence advances self.tts.cursor.total_samples,
-                # which the stamper reuses as its single source of truth.
+                # First event received from generator marks LLM first token
+                timer.mark_llm_first_token()
 
-                if first_say:
-                    first_say = False
-                    if (
-                        self.barge_in.should_play_filler(turn_start_s)
-                        and self.filler_cache
-                    ):
-                        # Synthesis exceeded 1,100ms: emit filler segment first
+                if isinstance(ev, SayEvent):
+                    self.barge_in.unplayed_text.append(ev.text)
+                    pcm_bytes = await self.tts.synthesize_sentence(ev.text)
+                    if not self.is_playing:
+                        break
+
+                    # First synthesized voice audio marks TTS first byte
+                    timer.mark_tts_first_byte()
+
+                    # Note: synthesize_sentence advances self.tts.cursor.total_samples,
+                    # which the stamper reuses as its single source of truth.
+
+                    if first_say:
+                        first_say = False
+                        if (
+                            self.barge_in.should_play_filler(turn_start_s)
+                            and self.filler_cache
+                        ):
+                            # Synthesis exceeded 1,100ms: emit filler segment first
+                            await self.emit_datachannel_event(
+                                self.stamper.emit_segment_start("filler")
+                            )
+                            filler_pcm = self.filler_cache.get("filler_0", b"")
+                            if filler_pcm:
+                                filler_samples = len(filler_pcm) // BYTES_PER_SAMPLE
+                                self.stamper.advance_samples(filler_samples)
+                                await self.pump_audio_pcm(filler_pcm)
+
+                        # Emit response segment
                         await self.emit_datachannel_event(
-                            self.stamper.emit_segment_start("filler")
+                            self.stamper.emit_segment_start("response")
                         )
-                        filler_pcm = self.filler_cache.get("filler_0", b"")
-                        if filler_pcm:
-                            filler_samples = len(filler_pcm) // BYTES_PER_SAMPLE
-                            self.stamper.advance_samples(filler_samples)
-                            await self.pump_audio_pcm(filler_pcm)
 
-                    # Emit response segment
+                    await self.pump_audio_pcm(pcm_bytes)
+                    if self.is_playing and ev.text in self.barge_in.unplayed_text:
+                        self.barge_in.unplayed_text.remove(ev.text)
+
+                elif isinstance(ev, (LatexEvent, PlotEvent, DiagramEvent, ClearEvent)):
+                    if first_say:
+                        first_say = False
+                        await self.emit_datachannel_event(
+                            self.stamper.emit_segment_start("response")
+                        )
+
+                    # Phase 7: use the OffsetStamper for exact playout_offset_ms
+                    stamp_result = self.stamper.stamp(ev)
+
+                    board_op = BoardOp(
+                        op_id=stamp_result.op_id,
+                        op_type=stamp_result.op_type,
+                        playout_offset_ms=stamp_result.playout_offset_ms,
+                        payload=stamp_result.payload,
+                    )
+                    board_ops.append(board_op)
+                    self.barge_in.unrendered_board_ops.append(board_op)
+
+                    # Register with epoch guard
+                    self.epoch_guard.accept(turn_id=turn_id, op=board_op)
+
+                    # Mark board op emitted span
+                    timer.mark_board_op_emitted()
+
+                    # Emit BOARD_SCHEDULE immediately
                     await self.emit_datachannel_event(
-                        self.stamper.emit_segment_start("response")
+                        BoardScheduleEvent(
+                            turn_id=turn_id,
+                            layout_mode="standard",
+                            operations=[board_op],
+                        )
                     )
 
-                await self.pump_audio_pcm(pcm_bytes)
-                if self.is_playing and ev.text in self.barge_in.unplayed_text:
-                    self.barge_in.unplayed_text.remove(ev.text)
+                elif isinstance(ev, CtrlEvent):
+                    logger.debug("Tutor CtrlEvent received: %s", ev.payload)
 
-            elif isinstance(ev, (LatexEvent, PlotEvent, DiagramEvent, ClearEvent)):
+            if self.is_playing:
                 if first_say:
-                    first_say = False
                     await self.emit_datachannel_event(
                         self.stamper.emit_segment_start("response")
                     )
-
-                # Phase 7: use the OffsetStamper for exact playout_offset_ms
-                stamp_result = self.stamper.stamp(ev)
-
-                board_op = BoardOp(
-                    op_id=stamp_result.op_id,
-                    op_type=stamp_result.op_type,
-                    playout_offset_ms=stamp_result.playout_offset_ms,
-                    payload=stamp_result.payload,
-                )
-                board_ops.append(board_op)
-                self.barge_in.unrendered_board_ops.append(board_op)
-
-                # Register with epoch guard
-                self.epoch_guard.accept(turn_id=turn_id, op=board_op)
-
-                # Emit BOARD_SCHEDULE immediately
-                await self.emit_datachannel_event(
-                    BoardScheduleEvent(
-                        turn_id=turn_id,
-                        layout_mode="standard",
-                        operations=[board_op],
-                    )
-                )
-
-            elif isinstance(ev, CtrlEvent):
-                logger.debug("Tutor CtrlEvent received: %s", ev.payload)
-
-        if first_say and self.is_playing:
-            await self.emit_datachannel_event(
-                self.stamper.emit_segment_start("response")
-            )
-
-        self.is_playing = False
+                timer.mark_turn_end(success=True)
+            else:
+                timer.mark_turn_end(success=False)
+        except (Exception, asyncio.CancelledError):
+            timer.mark_turn_end(success=False)
+            raise
+        finally:
+            self.is_playing = False

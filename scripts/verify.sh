@@ -114,6 +114,7 @@ if [ -f "apps/web/package.json" ]; then
     # Added by the operator after Phase 2: tsc + lint passed while
     # `next build` failed on a prerender error, so the full gate now builds.
     run_step "Web production build" bash -c "cd apps/web && pnpm build"
+    run_step "Secrets-in-bundle check" bash -c "bash ./scripts/check-bundle-secrets.sh apps/web/.next"
   fi
 fi
 
